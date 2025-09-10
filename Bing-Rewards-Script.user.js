@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Microsoft Bing Rewards Script by AKAPZG
 // @namespace    https://github.com/AKAPZG
-// @version      1.0.2
+// @version      1.0.3
 // @description  Automatically completes Microsoft Rewards daily search tasks with a built-in English keyword list.
 // @author       AKAPZG
 // @license      MIT
@@ -51,7 +51,7 @@
     const dailyBtn = true; // Show a "Daily Set" button for reward page tasks
     const dailyBtnText = 'Daily Set'; // Text for the button
 
-    // Default keywords list. The script will use these as a fallback since the API is disabled.
+    // Default keywords list. The script will use these.
     const defaultKeywords = [
         'Artificial Intelligence breakthroughs', 'Machine Learning applications', 'Quantum computing explained',
         'Latest advancements in biotechnology', 'CRISPR gene editing ethics', 'Renewable energy sources',
@@ -95,26 +95,6 @@
     GM_addStyle('.reward-task-btn { display: inline-block; line-height: 1; white-space: nowrap; cursor: pointer; background: #fff; border: 1px solid #dcdfe6; -webkit-appearance: none; text-align: center; -webkit-box-sizing: border-box; box-sizing: border-box; outline: 0; margin: 0; -webkit-transition: .1s; transition: .1s; font-weight: 500; padding: 8px 16px; font-size: 14px; border-radius: 4px; color: #606266; background-color: #ffffff; border: 1px solid #dcdfe6; border-color: #dcdfe6; }');
     GM_addStyle('.reward-task-btn.warning { color: #fff; background-color: #ebb563; border-color: #ebb563; }');
     GM_addStyle('#ScopeRow { margin-top: 48px; }');
-    
-    /**
-     * Helper function to wait for an element to appear in the DOM.
-     * @param {string} selector - The CSS selector of the element to wait for.
-     * @param {function} callback - The function to execute once the element is found.
-     */
-    const waitForElement = (selector, callback) => {
-        const maxTries = 50; // Try for 10 seconds (50 * 200ms)
-        let currentTry = 0;
-        const interval = setInterval(() => {
-            const element = document.querySelector(selector);
-            if (element) {
-                clearInterval(interval); // Element found, stop polling
-                callback(element);      // Execute the callback
-            } else if (++currentTry >= maxTries) {
-                clearInterval(interval); // Max tries reached, stop polling
-                console.error(`Bing Rewards Script: Could not find element '${selector}'.`);
-            }
-        }, 200); // Check every 200ms
-    };
 
     // Register menu commands
     const registerMenuCommand = () => {
@@ -261,9 +241,13 @@
             start();
         };
 
-        waitForElement('#sb_form', (queryForm) => {
-            queryForm.appendChild(btn);
-        });
+        // Reverted to the original, working setTimeout logic
+        setTimeout(() => {
+            const queryForm = document.getElementById('sb_form');
+            if (queryForm) {
+                queryForm.appendChild(btn);
+            }
+        }, location.pathname !== '/' ? 0 : 5000);
     };
 
     // Insert the "Daily Set" button
@@ -287,9 +271,13 @@
             navigateToRewardPage();
         };
 
-        waitForElement('#sb_form', (queryForm) => {
-            queryForm.appendChild(btn);
-        });
+        // Reverted to the original, working setTimeout logic
+        setTimeout(() => {
+            const queryForm = document.getElementById('sb_form');
+            if (queryForm) {
+                queryForm.appendChild(btn);
+            }
+        }, location.pathname !== '/' ? 0 : 5000);
     };
 
     // Insert the search task card UI
@@ -410,5 +398,243 @@
                     <p id="more-progress" class="item">More Tasks: ${ more.finish } / ${ more.total }</p>
                 </div>
                 <div>
-                    <p id="reward-task-delay" class="item">Waiting
+                    <p id="reward-task-delay" class="item">Waiting: ${ delay } s</p>
+                    <div class="btn-wrap"><button id="reward-task-stop" type="button" class="reward-task-btn warning">Stop</button></div>
+                </div>
+                <div>
+                    <p class="tips">Note: Daily tasks may only award points after a certain time of day!</p>
+                </div>
+            </div>
+        </div>`;
+        document.body.insertAdjacentHTML('beforeEnd', h);
+
+        const btnStop = document.querySelector('#reward-task-stop');
+        if (btnStop) {
+            btnStop.onclick = () => {
+                stop();
+                removeTaskCard();
+            };
+        }
+
+        delayWorker = getWorker(getCountDown, { times: delay });
+        delayWorker.onmessage = e => {
+            const domCurrPoints = document.getElementById('reward-points');
+            const domTaskPoints = document.getElementById('task-points');
+            const domTaskTodayPoints = document.getElementById('task-today-points');
+            if(domCurrPoints) domCurrPoints.innerText = `Current Points: ${ getCurrPoints() || '...' }`;
+            if(domTaskPoints) domTaskPoints.innerText = `Points This Run: ${ getTaskPoints() }`;
+            if(domTaskTodayPoints) domTaskTodayPoints.innerText = `Points Today: ${ getTodayPoints() }`;
+
+            if (e.data.times === 0) {
+                finish();
+                return;
+            }
+
+            const domDelay = document.getElementById('reward-task-delay');
+            if (!domDelay) {
+                return;
+            }
+            domDelay.innerText = `Waiting: ${ e.data.times } s`;
+
+            if (e.data.times > delay - clickDelaySecondsFirst) {
+                return;
+            }
+
+            const domDailyProgress = document.getElementById('daily-progress');
+            const domMoreProgress = document.getElementById('more-progress');
+            const index = delay - clickDelaySecondsFirst - e.data.times;
+            if (today.getHours() >= 12) {
+                if (index < daily.todo.length) {
+                    daily.todo[index].click();
+                    daily.finish++;
+                    if(domDailyProgress) domDailyProgress.innerText = `Daily Tasks: ${ daily.finish } / ${ daily.total }`;
+                } else if (index - daily.todo.length < more.todo.length) {
+                    more.todo[index - daily.todo.length].click();
+                    more.finish++;
+                    if(domMoreProgress) domMoreProgress.innerText = `More Tasks: ${ more.finish } / ${ more.total }`;
+                }
+            } else {
+                if (index < more.todo.length) {
+                    more.todo[index].click();
+                    more.finish++;
+                    if(domMoreProgress) domMoreProgress.innerText = `More Tasks: ${ more.finish } / ${ more.total }`;
+                }
+            }
+        };
+        delayWorker.postMessage({ type: "start", interval: 1000 });
+    };
+
+    // Remove the task card UI
+    const removeTaskCard = () => {
+        if (delayWorker) {
+            delayWorker.postMessage({ type: 'end' });
+        }
+        const taskCard = document.getElementById('reward-task');
+        if (taskCard) {
+            taskCard.remove();
+        }
+    };
+
+    // Simulate human browsing by scrolling
+    const pretendHuman = () => {
+        if (scrollWorker) {
+            scrollWorker.postMessage({ type: "end" });
+        }
+
+        window.scrollTo({
+            top: 0,
+            behavior: 'smooth'
+        });
+
+        scrollWorker = getWorker(getCountDown, { times: 120 });
+        scrollWorker.onmessage = e => {
+            if (e.data.times === 0 || document.documentElement.scrollTop >= document.documentElement.scrollHeight - document.documentElement.clientHeight) {
+                scrollWorker.postMessage({ type: "end" });
+                window.scrollTo({
+                    top: 0,
+                    behavior: 'smooth'
+                });
+                return;
+            }
+            const number = Math.floor(Math.random() * 10) + 1;
+            if (number < 3) {
+                window.scrollTo({
+                    top: document.documentElement.scrollTop - 200,
+                    behavior: 'smooth'
+                });
+            } else if (number > 5) {
+                window.scrollTo({
+                    top: document.documentElement.scrollTop + 100,
+                    behavior: 'smooth'
+                });
+            }
+        };
+        scrollWorker.postMessage({ type: "start", interval: 500 });
+    };
+
+    // Get the current points total from the page
+    const getCurrPoints = () => {
+        let pointsStr = '';
+        const searchPagePointsWrap = document.querySelector('#rh_rwm .points-container');
+        const rewardPagePointsWrap = document.querySelector('#balanceToolTipDiv.textAndIcon mee-rewards-counter-animation.ng-isolate-scope');
+        const mobilePagePointsWrap = document.querySelector('#fly_id_rc');
+        if (searchPagePointsWrap) {
+            if (!searchPagePointsWrap.classList.contains('balance-animation')) {
+                pointsStr = searchPagePointsWrap.innerText.trim();
+            } else {
+                pointsStr = document.documentElement.style.getPropertyValue('--rw-gp-balance-to');
+            }
+        } else if (rewardPagePointsWrap) {
+            const span = document.querySelector('#balanceToolTipDiv.textAndIcon mee-rewards-counter-animation.ng-isolate-scope span');
+            if (span) {
+                const v1 = rewardPagePointsWrap.innerText.trim().replace(/\D/g, '');
+                const v2 = span.getAttribute('aria-label').trim().replace(/\D/g, '');
+                pointsStr = v1 === v2 ? v1 : '';
+            }
+        } else if (mobilePagePointsWrap) {
+            pointsStr = mobilePagePointsWrap.innerText.trim();
+            const menuClose = document.querySelector('#HBFlyoutClose');
+            if (menuClose) {
+                menuClose.click();
+            }
+        } else {
+            const menuOpen = document.querySelector('#mHamburger');
+            if (menuOpen) {
+                menuOpen.click();
+            }
+        }
+        const points = parseInt(pointsStr);
+        return isNaN(points) ? null : points;
+    };
+
+    // Calculate points earned during this run
+    const getTaskPoints = () => {
+        const currPoints = getCurrPoints();
+        if (currPoints === null) return 0;
+        let startPoints = GM_getValue(searchPointsKey);
+        if (startPoints === -1 || !startPoints) {
+            GM_setValue(searchPointsKey, currPoints);
+            return 0;
+        }
+        return currPoints - startPoints;
+    };
+
+    // Calculate points earned today
+    const getTodayPoints = () => {
+        const currPoints = getCurrPoints();
+        if (currPoints === null) return 0;
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        if (GM_getValue(timeKey) !== today.getTime()) {
+            GM_setValue(timeKey, today.getTime());
+            GM_setValue(pointsKey, currPoints);
+            return 0;
+        }
+        return currPoints - GM_getValue(pointsKey);
+    };
+
+    // Web worker helper
+    function getWorker(worker, param) {
+        const code = worker.toString();
+        const blob = new Blob([`(${code})(${JSON.stringify(param)})`]);
+        return new Worker(URL.createObjectURL(blob));
+    }
+
+    // Countdown function for web worker
+    function getCountDown(param) {
+        let _timer = null;
+        let times = param.times;
+        this.onmessage = e => {
+            const data = e.data;
+            if (data.type === 'start') {
+                _timer = setInterval(() => {
+                    times--;
+                    this.postMessage({ times });
+                    if (times <= 0) {
+                        clearInterval(_timer);
+                    }
+                }, data.interval);
+            } else if (data.type === 'end') {
+                clearInterval(_timer);
+            }
+        };
+    }
+
+    // Generate a random string of a given length
+    const generateRandomString = length => {
+        const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+        let result = '';
+        const charactersLength = characters.length;
+        for (let i = 0; i < length; i++) {
+            result += characters.charAt(Math.floor(Math.random() * charactersLength));
+        }
+        return result;
+    };
+
+    // --- SCRIPT ENTRY POINT ---
+
+    registerMenuCommand();
+
+    if ('https://' + location.host === rewardHost) {
+        if (location.search === autoRunSearch) {
+            autoClickRewardActivity();
+        }
+        return;
+    }
+
+    if (pathnames.includes(location.pathname)) {
+        insertStartBtn();
+        insertDailyBtn();
+
+        const searchParam = GM_getValue(searchParamKey);
+        if (location.search === searchParam) {
+            search();
+            return;
+        }
+
+        if (location.search === autoRunSearch) {
+            start();
+        }
+        return;
+    }
 })();
