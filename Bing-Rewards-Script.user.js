@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Microsoft Bing Rewards Script by AKAPZG
 // @namespace    https://github.com/AKAPZG
-// @version      1.0.3
+// @version      1.0.4
 // @description  Automatically completes Microsoft Rewards daily search tasks with a built-in English keyword list.
 // @author       AKAPZG
 // @license      MIT
@@ -51,27 +51,63 @@
     const dailyBtn = true; // Show a "Daily Set" button for reward page tasks
     const dailyBtnText = 'Daily Set'; // Text for the button
 
-    // Default keywords list. The script will use these.
+    // Default keywords list customized for interests.
     const defaultKeywords = [
-        'Artificial Intelligence breakthroughs', 'Machine Learning applications', 'Quantum computing explained',
-        'Latest advancements in biotechnology', 'CRISPR gene editing ethics', 'Renewable energy sources',
-        'Future of electric vehicles', 'SpaceX Starship progress', 'NASA Artemis mission',
-        'James Webb Space Telescope discoveries', 'The history of ancient Rome', 'Philosophy of Stoicism',
-        'Beginner guide to Python programming', 'JavaScript frameworks comparison', 'How does blockchain work',
-        'Introduction to cybersecurity', 'Graphic design principles', 'Basics of music theory',
-        'World War II major events', 'The Silk Road history', 'Climate change impact',
-        'Sustainable agriculture techniques', 'Mental health awareness', 'Benefits of mindfulness meditation',
-        'Classic literature recommendations', 'How to learn a new language', 'DIY home improvement ideas',
-        'Healthy breakfast recipes', 'Effective workout routines', 'Understanding global economics',
-        'Theories of the universe', 'Exploring the deep sea', 'National Geographic documentaries',
-        'The British Royal Family', 'History of the Olympic Games', 'Famous painters and their works',
-        'Architectural wonders of the world', 'Basics of landscape photography', 'Financial planning for beginners',
-        'Stock market investment strategies', 'The rise of social media', 'Understanding digital marketing',
-        'How to write a novel', 'Learning to play the guitar', 'Famous speeches in history',
-        'The Industrial Revolution', 'Ancient Egyptian civilization', 'Greatest inventions of all time',
-        'Travel destinations in Southeast Asia', 'The physics of black holes', 'How do vaccines work',
-        'The importance of bees in the ecosystem', 'Learning about classical music composers', 'Volcanoes and plate tectonics',
-        'The human genome project'
+        // Music & Digital Products
+        'High-fidelity audio headphones review',
+        'Digital Audio Workstation (DAW) software comparison',
+        'Vinyl record collecting community Australia',
+        'How to build a guitar pedalboard',
+        'Comparing studio monitor speakers for home setup',
+        'Best lossless audio streaming services 2025',
+        'Latest flagship smartphone reviews',
+        'Building a custom mechanical keyboard',
+
+        // NAS & PC Hardware
+        'Building a home NAS with TrueNAS Scale',
+        'Synology vs QNAP NAS for Plex server',
+        'Benefits of a modular ATX 3.0 power supply',
+        'RAID 5 vs RAID 6 performance and reliability',
+        'Using Docker on a home NAS',
+        'Best hard drives for NAS storage 2025',
+        'Next generation CPU and GPU rumors',
+
+        // Car Enthusiast
+        'Turbocharger vs Supercharger differences explained',
+        'Car power-to-weight ratio calculator',
+        'How dual-clutch transmissions work',
+        'JDM car import laws Western Australia',
+        'Classic Holden and Ford muscle car restoration',
+        'Formula 1 aerodynamic concepts',
+        'Perth cars and coffee events',
+        'Off-road 4x4 accessories for Toyota Hilux',
+
+        // Gaming
+        'Upcoming open-world RPG games for PC',
+        'Building a high refresh rate 1440p gaming PC',
+        'History of the soulslike video game genre',
+        'Best cooperative board games for adults',
+        'Reviews of PlayStation 5 exclusives',
+        'Valorant Champions Tour APAC league',
+        'How to reduce input lag for competitive gaming',
+        'Baldur's Gate 3 build guides',
+
+        // Civil Engineering in Australia (Perth/WA focus)
+        'Engineers Australia (EA) accreditation process',
+        'National Engineering Register (NER) requirements',
+        'Australian Height Datum (AHD) Perth',
+        'Building Code of Australia (BCA/NCC) updates',
+        'AutoCAD vs BricsCAD for civil design',
+        'Geotechnical site investigation procedures',
+        'Sustainable infrastructure and green construction',
+        'Major infrastructure projects in Perth 2025',
+        'METRONET rail project progress',
+        'Structural analysis of concrete structures',
+        'Stormwater drainage design Main Roads WA',
+        'Project management in the construction industry',
+        'Career pathways for Chartered Civil Engineers in Australia',
+        'Use of Building Information Modeling (BIM) on WA projects',
+        'AS 3600 Concrete Structures standard'
     ];
 
 
