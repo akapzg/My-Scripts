@@ -9,8 +9,8 @@
 // @match        https://cn.bing.com/*
 // @match        https://rewards.bing.com/*
 // @icon         https://www.bing.com/favicon.ico
-// @downloadURL  https://raw.githubusercontent.com/akapzg/My-Scripts/main/Microsoft%20Bing%20Rewards%20Script%20by%20AKAPZG-1.0.1.user.js
-// @updateURL    https://raw.githubusercontent.com/akapzg/My-Scripts/main/Microsoft%20Bing%20Rewards%20Script%20by%20AKAPZG-1.0.1.user.js
+// @downloadURL  https://github.com/akapzg/My-Scripts/blob/main/Bing-Rewards-Script.user.js
+// @updateURL    https://github.com/akapzg/My-Scripts/blob/main/Bing-Rewards-Script.user.js
 // @run-at       document-end
 // @grant        GM_registerMenuCommand
 // @grant        GM_addStyle
