@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Microsoft Bing Rewards Script by AKAPZG
 // @namespace    https://github.com/AKAPZG
-// @version      1.0.6
+// @version      1.0.8
 // @description  Automatically completes Microsoft Rewards daily search tasks with a built-in English keyword list.
 // @author       AKAPZG
 // @license      MIT
@@ -33,7 +33,7 @@
     const pathnames = ['/', '/search']; // Trigger search on these pages
     const autoRunSearch = '?runMode=auto&runKey=1362311'; // Auto-run parameter
 
-    const searchTimes = 50; // Total number of searches to perform
+    const searchTimes = 30; // Total number of searches to perform
 
     const searchDelaySecondsMin = 15; // Minimum delay between searches (seconds)
     const searchDelaySecondsMax = 30; // Maximum delay between searches (seconds)
@@ -51,7 +51,7 @@
     const dailyBtn = true; // Show a "Daily Set" button for reward page tasks
     const dailyBtnText = 'Daily Set'; // Text for the button
 
-    // Default keywords list customized.
+    // Default keywords list customized for interests.
     const defaultKeywords = [
         // Music & Digital Products
         'High-fidelity audio headphones review',
@@ -90,7 +90,7 @@
         'Reviews of PlayStation 5 exclusives',
         'Valorant Champions Tour APAC league',
         'How to reduce input lag for competitive gaming',
-        "Baldur's Gate 3 build guides", // <-- This line has been corrected
+        "Baldur's Gate 3 build guides",
 
         // Civil Engineering in Australia (Perth/WA focus)
         'Engineers Australia (EA) accreditation process',
@@ -109,6 +109,17 @@
         'Use of Building Information Modeling (BIM) on WA projects',
         'AS 3600 Concrete Structures standard'
     ];
+    
+    // --- Dynamic Keyword Generation Logic ---
+    // Create a pool of individual words from the main keyword list for splicing.
+    const wordPool = [...new Set(defaultKeywords
+        .join(' ') // 1. Join all phrases into one giant string
+        .toLowerCase() // 2. Convert to lowercase
+        .replace(/[^\w\s]/g, '') // 3. Remove all punctuation
+        .split(' ') // 4. Split into individual words
+        .filter(word => word.length > 2) // 5. Filter out short words
+    )];
+    // --- End of Dynamic Logic ---
 
     const timeKey = 'time'; // Timestamp
     const countKey = 'count'; // Counter
@@ -228,7 +239,7 @@
                 return;
             }
 
-            // Fallback to defaultKeywords since API is disabled
+            // Fallback to the new dynamic keyword generator
             const keywords = generateKeywordList(100);
             if (keywords && keywords.length > 0) {
                 const keyword = keywords[0];
@@ -245,14 +256,32 @@
         });
     };
 
-    // Generate a randomized list from default keywords
+    // Generate a list of keywords using a 70/30 probability rule.
     const generateKeywordList = (size) => {
         if (size <= 0) {
             return [];
         }
-        // Shuffle the array to ensure randomness each day
-        const shuffled = [...defaultKeywords].sort(() => 0.5 - Math.random());
-        return shuffled.slice(0, size);
+
+        const generatedKeywords = [];
+        for (let i = 0; i < size; i++) {
+            if (Math.random() < 0.7) {
+                // 70% chance: Pick a full phrase from the original list
+                const randomIndex = Math.floor(Math.random() * defaultKeywords.length);
+                generatedKeywords.push(defaultKeywords[randomIndex]);
+            } else {
+                // 30% chance: Splice together a new phrase from the word pool
+                const wordCount = Math.floor(Math.random() * 3) + 2; // Generate a phrase of 2, 3, or 4 words
+                let newPhrase = [];
+                for (let j = 0; j < wordCount; j++) {
+                    const randomWordIndex = Math.floor(Math.random() * wordPool.length);
+                    newPhrase.push(wordPool[randomWordIndex]);
+                }
+                generatedKeywords.push(newPhrase.join(' '));
+            }
+        }
+
+        // Return a unique set of the generated keywords to avoid duplicates in a single run
+        return [...new Set(generatedKeywords)];
     };
 
     // Insert the "Start Tasks" button
@@ -293,7 +322,7 @@
         if (!dailyBtn) {
             return;
         }
-        
+
         const btn = document.createElement('button');
         btn.appendChild(document.createTextNode(dailyBtnText));
         btn.setAttribute('id', 'reward-task-daily');
@@ -412,7 +441,7 @@
                 more.finish++;
             }
         }
-        
+
         let delay = more.todo.length + clickDelaySecondsFirst;
         const today = new Date();
         if (today.getHours() >= 12) {
