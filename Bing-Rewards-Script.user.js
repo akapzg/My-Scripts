@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Microsoft Bing Rewards Script by AKAPZG
 // @namespace    https://github.com/AKAPZG
-// @version      1.1.0
+// @version      1.1.1
 // @description  Automatically completes Microsoft Rewards daily search tasks with a built-in English keyword list.
 // @author       AKAPZG
 // @license      MIT
@@ -156,6 +156,19 @@
         .reward-task-btn:active { transform: translateY(0); }
         .reward-task-btn.warning { background: #ff4d4f; box-shadow: 0 4px 12px rgba(255, 77, 79, 0.3); }
         .reward-task-btn.warning:hover { background: #ff7875; }
+
+        @media screen and (max-width: 768px) {
+            #reward-task-start {
+                position: fixed !important;
+                bottom: 30px !important;
+                right: 20px !important;
+                z-index: 9999 !important;
+                padding: 12px 24px !important;
+                border-radius: 30px !important;
+                box-shadow: 0 8px 32px rgba(0, 120, 212, 0.5) !important;
+                margin: 0 !important;
+            }
+        }
     `);
 
     // Register menu commands
@@ -291,20 +304,30 @@
         btn.setAttribute('id', 'reward-task-start');
         btn.setAttribute('type', 'button');
         btn.classList.add('reward-task-btn');
+        
+        // PC specific positioning style
         btn.style.setProperty('margin', '8px');
         btn.style.setProperty('padding', '8px 24px');
         btn.style.setProperty('border-radius', '24px');
+        
         btn.onclick = () => {
             start();
         };
 
-        // Reverted to the original, working setTimeout logic
-        setTimeout(() => {
-            const queryForm = document.getElementById('sb_form');
-            if (queryForm) {
-                queryForm.appendChild(btn);
-            }
-        }, location.pathname !== '/' ? 0 : 5000);
+        const isMobile = window.innerWidth < 768;
+
+        if (isMobile) {
+            // On mobile, use a floating button (FAB) to avoid overlap
+            document.body.appendChild(btn);
+        } else {
+            // On PC, keep it near the search bar
+            setTimeout(() => {
+                const queryForm = document.getElementById('sb_form');
+                if (queryForm) {
+                    queryForm.appendChild(btn);
+                }
+            }, location.pathname !== '/' ? 0 : 5000);
+        }
     };
 
     // Insert the search task card UI
@@ -488,3 +511,4 @@
         return;
     }
 })();
+
