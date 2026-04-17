@@ -1,13 +1,12 @@
 // ==UserScript==
 // @name         Microsoft Bing Rewards Script by AKAPZG
 // @namespace    https://github.com/AKAPZG
-// @version      1.0.8
+// @version      1.1.0
 // @description  Automatically completes Microsoft Rewards daily search tasks with a built-in English keyword list.
 // @author       AKAPZG
 // @license      MIT
 // @match        https://www.bing.com/*
 // @match        https://cn.bing.com/*
-// @match        https://rewards.bing.com/*
 // @icon         https://www.bing.com/favicon.ico
 // @downloadURL  https://raw.githubusercontent.com/akapzg/My-Scripts/main/Bing-Rewards-Script.user.js
 // @updateURL    https://raw.githubusercontent.com/akapzg/My-Scripts/main/Bing-Rewards-Script.user.js
@@ -19,7 +18,7 @@
 // @grant        GM_xmlhttpRequest
 // ==/UserScript==
 
-(function() {
+(function () {
     'use strict';
     // Only run in the top frame
     if (window.top !== window.self) {
@@ -28,7 +27,6 @@
 
     // This script no longer uses an external API. Keywords are provided in defaultKeywords.
 
-    const rewardHost = 'https://rewards.bing.com'; // Rewards page
     const searchHost = 'https://www.bing.com'; // Search page
     const pathnames = ['/', '/search']; // Trigger search on these pages
     const autoRunSearch = '?runMode=auto&runKey=1362311'; // Auto-run parameter
@@ -43,13 +41,8 @@
     const searchSafeDelayTimes = 4; // Trigger a long pause after every N searches
     const searchSafeDelaySeconds = 0 * 60; // Duration of the long pause (seconds)
 
-    const clickDelaySecondsFirst = 3; // Initial delay for daily activity clicks (seconds)
-
     const startBtn = true; // Show a "Start Tasks" button near the search bar
     const startBtnText = 'Start Tasks'; // Text for the button
-
-    const dailyBtn = true; // Show a "Daily Set" button for reward page tasks
-    const dailyBtnText = 'Daily Set'; // Text for the button
 
     // Default keywords list customized for interests.
     const defaultKeywords = [
@@ -109,7 +102,7 @@
         'Use of Building Information Modeling (BIM) on WA projects',
         'AS 3600 Concrete Structures standard'
     ];
-    
+
     // --- Dynamic Keyword Generation Logic ---
     // Create a pool of individual words from the main keyword list for splicing.
     const wordPool = [...new Set(defaultKeywords
@@ -121,10 +114,7 @@
     )];
     // --- End of Dynamic Logic ---
 
-    const timeKey = 'time'; // Timestamp
     const countKey = 'count'; // Counter
-    const pointsKey = 'points'; // Initial points for the day
-    const searchPointsKey = 'searchPoints'; // Initial points for the search task
     const keywordsKey = 'search'; // Keywords
     const searchParamKey = 'param'; // Search parameters
 
@@ -132,24 +122,46 @@
     let delayWorker = null; // Search task
     let scrollWorker = null; // Page scrolling simulation
 
-    GM_addStyle('#reward-task { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background-color: rgba(0, 0, 0, .2); z-index: 99999; }');
-    GM_addStyle('#reward-task > .reward-task-content { max-width: 460px; margin: calc(50vh - 32px) auto 0; padding: 20px; background-color: #ffffff; border: 1px solid #e4e7ed; border-radius: 20px; color: #303133; overflow: hidden; transition: 0.3s; box-shadow: 0px 0px 12px rgba(0,0,0,0.12); }');
-    GM_addStyle('#reward-task > .reward-task-content > div { display: flex; flex-flow: row wrap; align-items: center; column-gap: 12px; }');
-    GM_addStyle('#reward-task > .reward-task-content > div > .item { width: 160px; padding: 7px 0; }');
-    GM_addStyle('#reward-task > .reward-task-content > div > .tips { padding: 7px 0; color: #E6A23C; }');
-    GM_addStyle('#reward-task > .reward-task-content > div > .btn-wrap { flex-grow: 1; text-align: right; }');
-    GM_addStyle('.reward-task-btn { display: inline-block; line-height: 1; white-space: nowrap; cursor: pointer; background: #fff; border: 1px solid #dcdfe6; -webkit-appearance: none; text-align: center; -webkit-box-sizing: border-box; box-sizing: border-box; outline: 0; margin: 0; -webkit-transition: .1s; transition: .1s; font-weight: 500; padding: 8px 16px; font-size: 14px; border-radius: 4px; color: #606266; background-color: #ffffff; border: 1px solid #dcdfe6; border-color: #dcdfe6; }');
-    GM_addStyle('.reward-task-btn.warning { color: #fff; background-color: #ebb563; border-color: #ebb563; }');
-    GM_addStyle('#ScopeRow { margin-top: 48px; }');
+    GM_addStyle(`
+        #reward-task { 
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; 
+            background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(8px); 
+            z-index: 99999; display: flex; align-items: center; justify-content: center;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            animation: fadeIn 0.3s ease;
+        }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        #reward-task .reward-task-content { 
+            width: 90%; max-width: 400px; padding: 24px; 
+            background: rgba(255, 255, 255, 0.85); 
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 24px; color: #1a1a1a; 
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+            transform: translateY(0); transition: 0.3s;
+        }
+        #reward-task .reward-task-content h2 { margin: 0 0 16px; font-size: 20px; font-weight: 600; color: #0078d4; }
+        #reward-task .item-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        #reward-task .label { color: #666; font-size: 14px; }
+        #reward-task .value { font-weight: 600; font-size: 15px; }
+        #reward-task .progress-container { width: 100%; height: 6px; background: rgba(0,0,0,0.05); border-radius: 3px; margin: 20px 0; overflow: hidden; }
+        #reward-task .progress-bar { height: 100%; background: linear-gradient(90deg, #0078d4, #00bcf2); width: 0%; transition: width 1s linear; }
+        #reward-task .btn-wrap { display: flex; justify-content: flex-end; margin-top: 10px; }
+        .reward-task-btn { 
+            cursor: pointer; border: none; font-weight: 600; padding: 10px 20px; 
+            font-size: 14px; border-radius: 12px; transition: all 0.2s;
+            background: #0078d4; color: white; box-shadow: 0 4px 12px rgba(0, 120, 212, 0.3);
+        }
+        .reward-task-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(0, 120, 212, 0.4); background: #0086ed; }
+        .reward-task-btn:active { transform: translateY(0); }
+        .reward-task-btn.warning { background: #ff4d4f; box-shadow: 0 4px 12px rgba(255, 77, 79, 0.3); }
+        .reward-task-btn.warning:hover { background: #ff7875; }
+    `);
 
     // Register menu commands
     const registerMenuCommand = () => {
         GM_registerMenuCommand('Start Searches', () => {
             start();
-        });
-
-        GM_registerMenuCommand('Start Daily Set & Searches', () => {
-            navigateToRewardPage();
         });
 
         GM_registerMenuCommand('Stop', () => {
@@ -161,34 +173,15 @@
     // Start the search task
     const start = () => {
         GM_setValue(countKey, 1);
-        GM_setValue(searchPointsKey, -1);
         search();
     };
 
     // Stop the search task
     const stop = () => {
         GM_setValue(countKey, 0);
-        GM_setValue(searchPointsKey, -1);
         if (scrollWorker) {
             scrollWorker.postMessage({ type: "end" });
         }
-    };
-
-    // Navigate to the rewards page for daily tasks
-    const navigateToRewardPage = () => {
-        location.href = rewardHost + autoRunSearch;
-    };
-
-    // Navigate to the search page to start searches
-    const navigateToSearchPage = () => {
-        location.href = searchHost + autoRunSearch;
-    };
-
-    // Automatically click and complete daily reward activities
-    const autoClickRewardActivity = () => {
-        insertActivityTaskCard(() => {
-            navigateToSearchPage();
-        });
     };
 
     // The main search function
@@ -204,7 +197,7 @@
         insertTaskCard(count - 1, delay, () => {
             getSearchInfo().then(keyword => {
                 const queryInput = document.getElementById('sb_form_q');
-                const param = `?q=${ encodeURIComponent(keyword) }&form=${ Math.random() > 0.4 ? 'QBLH' : 'QBRE' }&sp=-1&lq=0&pq=${ queryInput ? encodeURIComponent(queryInput.value) || '' : '' }&sc=0-0&qs=n&sk=&cvid=${ generateRandomString(32) }&ghsh=0&ghacc=0&ghpl=`;
+                const param = `?q=${encodeURIComponent(keyword)}&form=QBLH&sp=-1&lq=0&pq=${queryInput ? encodeURIComponent(queryInput.value) || '' : ''}&sc=0-0&qs=n&sk=&cvid=${generateRandomString(32)}&brs=1`;
 
                 GM_setValue(countKey, count + 1);
                 GM_setValue(searchParamKey, param);
@@ -314,53 +307,34 @@
         }, location.pathname !== '/' ? 0 : 5000);
     };
 
-    // Insert the "Daily Set" button
-    const insertDailyBtn = () => {
-        if (document.getElementById('reward-task-daily')) {
-            document.getElementById('reward-task-daily').remove();
-        }
-        if (!dailyBtn) {
-            return;
-        }
-
-        const btn = document.createElement('button');
-        btn.appendChild(document.createTextNode(dailyBtnText));
-        btn.setAttribute('id', 'reward-task-daily');
-        btn.setAttribute('type', 'button');
-        btn.classList.add('reward-task-btn');
-        btn.style.setProperty('margin', '8px');
-        btn.style.setProperty('padding', '8px 24px');
-        btn.style.setProperty('border-radius', '24px');
-        btn.onclick = () => {
-            navigateToRewardPage();
-        };
-
-        // Reverted to the original, working setTimeout logic
-        setTimeout(() => {
-            const queryForm = document.getElementById('sb_form');
-            if (queryForm) {
-                queryForm.appendChild(btn);
-            }
-        }, location.pathname !== '/' ? 0 : 5000);
-    };
-
     // Insert the search task card UI
     const insertTaskCard = (times, delay, finish) => {
         removeTaskCard();
 
-        const h = `<div id="reward-task">
+        const h = `
+        <div id="reward-task">
             <div class="reward-task-content">
-                <div>
-                    <p id="reward-points" class="item">Current Points: ${ getCurrPoints() || '...' }</p>
+                <h2>Rewards Task</h2>
+                <div class="item-row">
+                    <span class="label">Progress</span>
+                    <span class="value">${times} / ${searchTimes}</span>
                 </div>
-                <div>
-                    <p id="task-points" class="item">Points This Run: ${ getTaskPoints() }</p>
-                    <p id="task-today-points" class="item">Points Today: ${ getTodayPoints() }</p>
+                <div class="item-row">
+                    <span class="label">Status</span>
+                    <span id="reward-task-status" class="value">${times >= searchTimes ? 'Completed' : 'Waiting...'}</span>
                 </div>
-                <div>
-                    <p class="item">Progress: ${ times } / ${ searchTimes }</p>
-                    <p id="reward-task-delay" class="item">${ times >= searchTimes ? `Completed${ closeTaskCardDelaySeconds > 0 ? ', closing in ' + closeTaskCardDelaySeconds + 's' : '' }` : `Waiting: ${ delay } s` }</p>
-                    <div class="btn-wrap">${ times >= searchTimes ? '<button id="reward-task-cancel" type="button" class="reward-task-btn warning">Close</button>' : '<button id="reward-task-stop" type="button" class="reward-task-btn warning">Stop</button>' }</div>
+                <div class="progress-container">
+                    <div id="reward-progress-bar" class="progress-bar"></div>
+                </div>
+                <div class="item-row">
+                    <span id="reward-task-delay" class="value" style="font-size: 13px; color: #888;">
+                        ${times >= searchTimes ? 'Closing soon' : `Next search in ${delay}s`}
+                    </span>
+                    <div class="btn-wrap">
+                        <button id="reward-task-stop" type="button" class="reward-task-btn warning">
+                            ${times >= searchTimes ? 'Close' : 'Stop'}
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>`;
@@ -369,14 +343,6 @@
         const btnStop = document.querySelector('#reward-task-stop');
         if (btnStop) {
             btnStop.onclick = () => {
-                stop();
-                removeTaskCard();
-            };
-        }
-
-        const btnCancel = document.querySelector('#reward-task-cancel');
-        if (btnCancel) {
-            btnCancel.onclick = () => {
                 stop();
                 removeTaskCard();
             };
@@ -384,145 +350,32 @@
 
         if (times >= searchTimes && closeTaskCardDelaySeconds > 0) {
             setTimeout(() => {
+                stop();
                 removeTaskCard();
             }, closeTaskCardDelaySeconds * 1000);
         }
 
         let remainDelay = times >= searchTimes ? 10 : delay;
+        const totalDelay = remainDelay;
+        const progressBar = document.getElementById('reward-progress-bar');
+
         delayWorker = getWorker(getCountDown, { times: remainDelay });
         delayWorker.onmessage = e => {
-            const domCurrPoints = document.getElementById('reward-points');
-            const domTaskPoints = document.getElementById('task-points');
-            const domTaskTodayPoints = document.getElementById('task-today-points');
-            if(domCurrPoints) domCurrPoints.innerText = `Current Points: ${ getCurrPoints() || '...' }`;
-            if(domTaskPoints) domTaskPoints.innerText = `Points This Run: ${ getTaskPoints() }`;
-            if(domTaskTodayPoints) domTaskTodayPoints.innerText = `Points Today: ${ getTodayPoints() }`;
-
-            if (times >= searchTimes) {
-                return;
-            }
+            if (times >= searchTimes) return;
 
             if (e.data.times === 0) {
+                const statusDom = document.getElementById('reward-task-status');
+                if (statusDom) statusDom.innerText = 'Searching...';
                 finish();
                 return;
             }
 
             const domDelay = document.getElementById('reward-task-delay');
-            if (!domDelay) {
-                return;
-            }
-            domDelay.innerText = `Waiting: ${ e.data.times } s`;
-        };
-        delayWorker.postMessage({ type: "start", interval: 1000 });
-    };
+            if (domDelay) domDelay.innerText = `Next search in ${e.data.times}s`;
 
-    // Insert the daily activity task card UI
-    const insertActivityTaskCard = (finish) => {
-        removeTaskCard();
-
-        const daily = { todo: [], total: 0, finish: 0 };
-        const dailyActivitys = document.querySelectorAll('mee-rewards-daily-set-section mee-card.ng-scope.c-card:not([disabled=disabled]) a.ds-card-sec');
-        for (let i = 0; i < dailyActivitys.length; i++) {
-            daily.total++;
-            if (dailyActivitys[i].querySelectorAll('.mee-icon.mee-icon-AddMedium').length > 0) {
-                daily.todo.push(dailyActivitys[i]);
-            } else {
-                daily.finish++;
-            }
-        }
-
-        const more = { todo: [], total: 0, finish: 0 };
-        const moreActivitys = document.querySelectorAll('mee-rewards-more-activities-card mee-card.ng-scope.c-card:not([disabled=disabled]) a.ds-card-sec');
-        for (let i = 0; i < moreActivitys.length; i++) {
-            more.total++;
-            if (moreActivitys[i].querySelectorAll('.mee-icon.mee-icon-AddMedium').length > 0) {
-                more.todo.push(moreActivitys[i]);
-            } else {
-                more.finish++;
-            }
-        }
-
-        let delay = more.todo.length + clickDelaySecondsFirst;
-        const today = new Date();
-        if (today.getHours() >= 12) {
-            delay += daily.todo.length;
-        }
-
-        const h = `<div id="reward-task">
-            <div class="reward-task-content">
-                <div>
-                    <p id="reward-points" class="item">Current Points: ${ getCurrPoints() || '...' }</p>
-                </div>
-                <div>
-                    <p id="task-points" class="item">Points This Run: ${ getTaskPoints() }</p>
-                    <p id="task-today-points" class="item">Points Today: ${ getTodayPoints() }</p>
-                </div>
-                <div>
-                    <p id="daily-progress" class="item">Daily Tasks: ${ daily.finish } / ${ daily.total }</p>
-                    <p id="more-progress" class="item">More Tasks: ${ more.finish } / ${ more.total }</p>
-                </div>
-                <div>
-                    <p id="reward-task-delay" class="item">Waiting: ${ delay } s</p>
-                    <div class="btn-wrap"><button id="reward-task-stop" type="button" class="reward-task-btn warning">Stop</button></div>
-                </div>
-                <div>
-                    <p class="tips">Note: Daily tasks may only award points after a certain time of day!</p>
-                </div>
-            </div>
-        </div>`;
-        document.body.insertAdjacentHTML('beforeEnd', h);
-
-        const btnStop = document.querySelector('#reward-task-stop');
-        if (btnStop) {
-            btnStop.onclick = () => {
-                stop();
-                removeTaskCard();
-            };
-        }
-
-        delayWorker = getWorker(getCountDown, { times: delay });
-        delayWorker.onmessage = e => {
-            const domCurrPoints = document.getElementById('reward-points');
-            const domTaskPoints = document.getElementById('task-points');
-            const domTaskTodayPoints = document.getElementById('task-today-points');
-            if(domCurrPoints) domCurrPoints.innerText = `Current Points: ${ getCurrPoints() || '...' }`;
-            if(domTaskPoints) domTaskPoints.innerText = `Points This Run: ${ getTaskPoints() }`;
-            if(domTaskTodayPoints) domTaskTodayPoints.innerText = `Points Today: ${ getTodayPoints() }`;
-
-            if (e.data.times === 0) {
-                finish();
-                return;
-            }
-
-            const domDelay = document.getElementById('reward-task-delay');
-            if (!domDelay) {
-                return;
-            }
-            domDelay.innerText = `Waiting: ${ e.data.times } s`;
-
-            if (e.data.times > delay - clickDelaySecondsFirst) {
-                return;
-            }
-
-            const domDailyProgress = document.getElementById('daily-progress');
-            const domMoreProgress = document.getElementById('more-progress');
-            const index = delay - clickDelaySecondsFirst - e.data.times;
-            if (today.getHours() >= 12) {
-                if (index < daily.todo.length) {
-                    daily.todo[index].click();
-                    daily.finish++;
-                    if(domDailyProgress) domDailyProgress.innerText = `Daily Tasks: ${ daily.finish } / ${ daily.total }`;
-                } else if (index - daily.todo.length < more.todo.length) {
-                    more.todo[index - daily.todo.length].click();
-                    more.finish++;
-                    if(domMoreProgress) domMoreProgress.innerText = `More Tasks: ${ more.finish } / ${ more.total }`;
-                }
-            } else {
-                if (index < more.todo.length) {
-                    more.todo[index].click();
-                    more.finish++;
-                    if(domMoreProgress) domMoreProgress.innerText = `More Tasks: ${ more.finish } / ${ more.total }`;
-                }
+            if (progressBar) {
+                const percent = ((totalDelay - e.data.times) / totalDelay) * 100;
+                progressBar.style.width = percent + '%';
             }
         };
         delayWorker.postMessage({ type: "start", interval: 1000 });
@@ -576,66 +429,7 @@
         scrollWorker.postMessage({ type: "start", interval: 500 });
     };
 
-    // Get the current points total from the page
-    const getCurrPoints = () => {
-        let pointsStr = '';
-        const searchPagePointsWrap = document.querySelector('#rh_rwm .points-container');
-        const rewardPagePointsWrap = document.querySelector('#balanceToolTipDiv.textAndIcon mee-rewards-counter-animation.ng-isolate-scope');
-        const mobilePagePointsWrap = document.querySelector('#fly_id_rc');
-        if (searchPagePointsWrap) {
-            if (!searchPagePointsWrap.classList.contains('balance-animation')) {
-                pointsStr = searchPagePointsWrap.innerText.trim();
-            } else {
-                pointsStr = document.documentElement.style.getPropertyValue('--rw-gp-balance-to');
-            }
-        } else if (rewardPagePointsWrap) {
-            const span = document.querySelector('#balanceToolTipDiv.textAndIcon mee-rewards-counter-animation.ng-isolate-scope span');
-            if (span) {
-                const v1 = rewardPagePointsWrap.innerText.trim().replace(/\D/g, '');
-                const v2 = span.getAttribute('aria-label').trim().replace(/\D/g, '');
-                pointsStr = v1 === v2 ? v1 : '';
-            }
-        } else if (mobilePagePointsWrap) {
-            pointsStr = mobilePagePointsWrap.innerText.trim();
-            const menuClose = document.querySelector('#HBFlyoutClose');
-            if (menuClose) {
-                menuClose.click();
-            }
-        } else {
-            const menuOpen = document.querySelector('#mHamburger');
-            if (menuOpen) {
-                menuOpen.click();
-            }
-        }
-        const points = parseInt(pointsStr);
-        return isNaN(points) ? null : points;
-    };
 
-    // Calculate points earned during this run
-    const getTaskPoints = () => {
-        const currPoints = getCurrPoints();
-        if (currPoints === null) return 0;
-        let startPoints = GM_getValue(searchPointsKey);
-        if (startPoints === -1 || !startPoints) {
-            GM_setValue(searchPointsKey, currPoints);
-            return 0;
-        }
-        return currPoints - startPoints;
-    };
-
-    // Calculate points earned today
-    const getTodayPoints = () => {
-        const currPoints = getCurrPoints();
-        if (currPoints === null) return 0;
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        if (GM_getValue(timeKey) !== today.getTime()) {
-            GM_setValue(timeKey, today.getTime());
-            GM_setValue(pointsKey, currPoints);
-            return 0;
-        }
-        return currPoints - GM_getValue(pointsKey);
-    };
 
     // Web worker helper
     function getWorker(worker, param) {
@@ -679,19 +473,11 @@
 
     registerMenuCommand();
 
-    if ('https://' + location.host === rewardHost) {
-        if (location.search === autoRunSearch) {
-            autoClickRewardActivity();
-        }
-        return;
-    }
-
     if (pathnames.includes(location.pathname)) {
         insertStartBtn();
-        insertDailyBtn();
 
-        const searchParam = GM_getValue(searchParamKey);
-        if (location.search === searchParam) {
+        const count = GM_getValue(countKey);
+        if (count && count > 0 && count <= searchTimes + 1) {
             search();
             return;
         }
