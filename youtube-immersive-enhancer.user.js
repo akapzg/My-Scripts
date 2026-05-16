@@ -1,16 +1,16 @@
 // ==UserScript==
-// @name         YouTube Auto Theater Mode
+// @name         YouTube Immersive Enhancer
 // @name:zh-CN   YouTube 沉浸式观影增强
 // @namespace    https://github.com/AKAPZG
-// @version      1.3.1
+// @version      1.4.0
 // @description  Automatically enable theater mode, subtitles, auto-HD, auto-skip ads, and hide Shorts.
 // @description:zh-CN  自动开启剧场模式、字幕、最高画质、跳过广告、关闭连播，并隐藏首页推荐的Shorts。
 // @author       AKAPZG
 // @license      MIT
 // @match        *://*.youtube.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=youtube.com
-// @downloadURL  https://raw.githubusercontent.com/akapzg/My-Scripts/main/youtube-auto-theater.user.js
-// @updateURL    https://raw.githubusercontent.com/akapzg/My-Scripts/main/youtube-auto-theater.user.js
+// @downloadURL  https://raw.githubusercontent.com/akapzg/My-Scripts/main/youtube-immersive-enhancer.user.js
+// @updateURL    https://raw.githubusercontent.com/akapzg/My-Scripts/main/youtube-immersive-enhancer.user.js
 // @run-at       document-end
 // @grant        none
 // ==/UserScript==
