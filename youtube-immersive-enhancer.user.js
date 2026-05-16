@@ -2,7 +2,7 @@
 // @name         YouTube Immersive Enhancer
 // @name:zh-CN   YouTube 沉浸式观影增强
 // @namespace    https://github.com/AKAPZG
-// @version      1.4.1
+// @version      1.4.2
 // @description  Automatically enable theater mode, subtitles, auto-HD, auto-skip ads, and hide Shorts.
 // @description:zh-CN  自动开启剧场模式、字幕、最高画质、跳过广告、关闭连播，并隐藏首页推荐的Shorts。
 // @author       AKAPZG
@@ -185,10 +185,10 @@
     }, 2000); // 较低频率去寻找新的 video 元素
 
     // ==========================================
-    // 自动跳过广告逻辑 (独立高频检测)
+    // 自动跳过广告 & 弹窗清理逻辑 (独立高频检测)
     // ==========================================
-    if (CONFIG.autoSkipAds) {
-        setInterval(() => {
+    setInterval(() => {
+        if (CONFIG.autoSkipAds) {
             const skipButtons = document.querySelectorAll('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button');
             skipButtons.forEach(btn => {
                 if (btn && btn.style.display !== 'none') {
@@ -202,7 +202,21 @@
                     btn.click();
                 }
             });
-        }, 500);
-    }
+        }
+
+        // 自动关闭因为强制切换画质导致的 "Experiencing interruptions?" (播放不流畅/中断) 提示
+        const toasts = document.querySelectorAll('tp-yt-paper-toast');
+        toasts.forEach(toast => {
+            if (toast.style.display !== 'none') {
+                const text = toast.textContent || '';
+                if (text.includes('interruptions') || text.includes('不流畅') || text.includes('中断')) {
+                    // 点击内部的按钮或直接隐藏
+                    const actionBtn = toast.querySelector('button, yt-button-shape');
+                    if (actionBtn) actionBtn.click();
+                    toast.style.display = 'none';
+                }
+            }
+        });
+    }, 500);
 
 })();
