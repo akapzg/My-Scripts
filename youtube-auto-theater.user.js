@@ -2,7 +2,7 @@
 // @name         YouTube Auto Theater Mode
 // @name:zh-CN   YouTube 自动剧场模式
 // @namespace    https://github.com/AKAPZG
-// @version      1.2.0
+// @version      1.2.1
 // @description  Automatically enable theater mode and subtitles, and hide Shorts on the homepage.
 // @description:zh-CN  在打开YouTube视频时默认自动切换为剧场模式并开启字幕，同时隐藏首页推荐的Shorts。
 // @author       AKAPZG
@@ -20,15 +20,20 @@
 
     // 隐藏 Shorts 的 CSS 规则
     const hideShortsCSS = `
-        /* 首页的 Shorts 推荐栏 (通过属性或内部包含识别) */
-        ytd-rich-section-renderer:has(ytd-rich-shelf-renderer[is-shorts]),
-        ytd-rich-shelf-renderer[is-shorts],
-        /* 相关视频里的 Shorts 推荐栏 / 搜索页的 Shorts */
-        ytd-reel-shelf-renderer,
-        /* 左侧导航栏的 Shorts 按钮 */
-        ytd-guide-entry-renderer:has([title="Shorts"]),
-        a#endpoint[title="Shorts"],
-        ytd-mini-guide-entry-renderer[aria-label="Shorts"] {
+        /* 1. 隐藏包含 Shorts 链接的整个推荐栏 (首页和搜索页) */
+        ytd-rich-section-renderer:has(a[href^="/shorts/"]),
+        ytd-reel-shelf-renderer:has(a[href^="/shorts/"]),
+        
+        /* 2. 隐藏混在普通视频网格中的单个 Shorts 视频 */
+        ytd-rich-item-renderer:has(a[href^="/shorts/"]),
+        
+        /* 3. 隐藏右侧相关推荐里的 Shorts */
+        ytd-compact-video-renderer:has(a[href^="/shorts/"]),
+        
+        /* 4. 左侧导航栏的 Shorts 按钮 */
+        ytd-guide-entry-renderer:has(a[title="Shorts"]),
+        ytd-mini-guide-entry-renderer[aria-label="Shorts"],
+        a#endpoint[title="Shorts"] {
             display: none !important;
         }
     `;
