@@ -2,7 +2,7 @@
 // @name         YouTube Immersive Enhancer
 // @name:zh-CN   YouTube 沉浸式观影增强
 // @namespace    https://github.com/AKAPZG
-// @version      1.4.0
+// @version      1.4.1
 // @description  Automatically enable theater mode, subtitles, auto-HD, auto-skip ads, and hide Shorts.
 // @description:zh-CN  自动开启剧场模式、字幕、最高画质、跳过广告、关闭连播，并隐藏首页推荐的Shorts。
 // @author       AKAPZG
@@ -54,9 +54,6 @@
     }
 
     let lastVideoId = null;
-    let attemptCount = 0;
-    const MAX_ATTEMPTS = 20; // 增加一些尝试次数以适应网速慢的情况
-    
     let appliedStates = {};
 
     function applyVideoSettings() {
@@ -69,138 +66,143 @@
         // 如果检测到打开了新的视频，重置状态
         if (lastVideoId !== videoId) {
             lastVideoId = videoId;
-            attemptCount = 0;
             appliedStates = {
                 theater: !CONFIG.enableTheater,
                 cc: !CONFIG.enableCC,
                 quality: !CONFIG.autoHD,
-                speed: false, // 每次新视频都要重置倍速，因为YouTube可能会重置它
+                speed: false, // 倍速每次新视频都需要重新确认
                 autoplay: !CONFIG.disableAutoplay
             };
         }
 
-        // 如果所有配置的功能都已应用，则退出
+        // 检查是否全部应用完毕，完毕则直接返回以节省性能
         const allApplied = Object.values(appliedStates).every(v => v === true);
-        if (attemptCount >= MAX_ATTEMPTS || allApplied) return;
+        if (allApplied) return;
 
-        // 抓取播放器控件
+        // 抓取核心控件
         const watchFlexy = document.querySelector('ytd-watch-flexy');
-        const sizeButton = document.querySelector('.ytp-size-button');
-        const ccButton = document.querySelector('.ytp-subtitles-button');
-        const autonavToggle = document.querySelector('.ytp-autonav-toggle-button');
         const player = document.getElementById('movie_player');
         const video = document.querySelector('video.html5-main-video');
 
-        // 确保页面主体加载完毕再执行，避免空转
+        // 【关键修复】判断视频是否真正开始加载或播放
+        // iOS Safari 经常会在用户手动点击播放前，阻止视频的初始化和 UI 的完全渲染
+        const isVideoReady = video && video.readyState > 0;
+        const isVideoPlaying = video && !video.paused;
+
         if (watchFlexy && player) {
             
-            // 1. 剧场模式
-            if (!appliedStates.theater && sizeButton) {
-                if (!watchFlexy.hasAttribute('theater')) {
-                    sizeButton.click();
-                    console.log('[YouTube 增强] 已开启剧场模式');
-                }
-                appliedStates.theater = true;
-            }
-
-            // 2. 自动字幕 (CC)
-            if (!appliedStates.cc) {
-                // 优先尝试使用 YouTube Player 内部 API (最稳定，无视 UI 隐藏和触屏限制)
-                if (player && typeof player.toggleSubtitlesOn === 'function') {
-                    player.toggleSubtitlesOn();
-                    console.log('[YouTube 增强] 已通过 API 请求开启字幕');
-                    appliedStates.cc = true;
-                } 
-                // 降级方案：模拟点击 CC 按钮
-                else if (ccButton) {
-                    const isCcOn = ccButton.getAttribute('aria-pressed') === 'true';
-                    // 移除了 display !== 'none' 的限制，因为 iPad 上控制栏隐藏时也会导致失效
-                    if (!isCcOn) {
-                        // 在 iPad Safari 上，原生的 .click() 可能会被拦截或忽略，改用底层事件派发
-                        ccButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-                        console.log('[YouTube 增强] 已通过模拟点击开启字幕');
+            // 1. 剧场模式 (UI 按钮，通常可以尽早点击)
+            if (!appliedStates.theater) {
+                const sizeButton = document.querySelector('.ytp-size-button');
+                if (sizeButton) {
+                    if (!watchFlexy.hasAttribute('theater')) {
+                        sizeButton.click();
+                        console.log('[YouTube 增强] 剧场模式已开启');
                     }
-                    appliedStates.cc = true;
+                    appliedStates.theater = true;
                 }
             }
 
-            // 3. 自动关闭连播 (Autoplay)
-            if (!appliedStates.autoplay && autonavToggle) {
-                const isAutoplayOn = autonavToggle.getAttribute('aria-checked') === 'true';
-                if (isAutoplayOn) {
-                    autonavToggle.click();
-                    console.log('[YouTube 增强] 已关闭自动连播');
+            // 2. 关闭连播 (UI 按钮)
+            if (!appliedStates.autoplay) {
+                const autonavToggle = document.querySelector('.ytp-autonav-toggle-button');
+                if (autonavToggle) {
+                    const isAutoplayOn = autonavToggle.getAttribute('aria-checked') === 'true';
+                    if (isAutoplayOn) {
+                        autonavToggle.click();
+                        console.log('[YouTube 增强] 自动连播已关闭');
+                    }
+                    appliedStates.autoplay = true;
                 }
-                appliedStates.autoplay = true;
             }
 
-            // 4. 自动最高画质 (通过 YouTube API)
-            if (!appliedStates.quality && player.setPlaybackQualityRange) {
-                player.setPlaybackQualityRange('highres', 'highres'); 
-                console.log('[YouTube 增强] 已请求最高画质');
-                appliedStates.quality = true;
-            }
-
-            // 5. 自动播放倍速
-            if (!appliedStates.speed && video && player.setPlaybackRate) {
-                if (video.playbackRate !== CONFIG.preferredSpeed) {
-                    player.setPlaybackRate(CONFIG.preferredSpeed);
-                    console.log(`[YouTube 增强] 已设置播放倍速为 ${CONFIG.preferredSpeed}x`);
+            // 3, 4, 5 的功能强依赖于播放器和视频流的实际加载
+            // 在 iPad 上，必须等 video 至少 readyState > 0 或正在播放才能有效设置
+            if (isVideoReady || isVideoPlaying) {
+                
+                // 3. 自动字幕 (优先内部 API，兼容移动端)
+                if (!appliedStates.cc) {
+                    if (typeof player.toggleSubtitlesOn === 'function') {
+                        player.toggleSubtitlesOn();
+                        console.log('[YouTube 增强] 已请求开启字幕 (API)');
+                        appliedStates.cc = true;
+                    } else {
+                        const ccButton = document.querySelector('.ytp-subtitles-button');
+                        if (ccButton) {
+                            const isCcOn = ccButton.getAttribute('aria-pressed') === 'true';
+                            if (!isCcOn) {
+                                ccButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+                                console.log('[YouTube 增强] 已请求开启字幕 (点击)');
+                            }
+                            appliedStates.cc = true;
+                        }
+                    }
                 }
-                // 即便是当前已经是设置的倍速，也将其标记为已处理
-                appliedStates.speed = true;
+
+                // 4. 自动最高画质
+                if (!appliedStates.quality && typeof player.setPlaybackQualityRange === 'function') {
+                    player.setPlaybackQualityRange('highres', 'highres'); 
+                    console.log('[YouTube 增强] 已请求最高画质');
+                    appliedStates.quality = true;
+                }
+
+                // 5. 自动播放倍速
+                if (!appliedStates.speed && typeof player.setPlaybackRate === 'function') {
+                    if (video.playbackRate !== CONFIG.preferredSpeed) {
+                        player.setPlaybackRate(CONFIG.preferredSpeed);
+                        console.log(`[YouTube 增强] 已设置播放倍速为 ${CONFIG.preferredSpeed}x`);
+                    }
+                    appliedStates.speed = true;
+                }
             }
-            
-            attemptCount++;
         }
     }
 
     // ==========================================
-    // 自动跳过广告逻辑 (独立循环，高频检测)
+    // 核心监控逻辑
+    // ==========================================
+
+    // 1. 低频循环检测：移除原来的 MAX_ATTEMPTS 限制，
+    // 因为在 Safari 上用户可能过了很久才点击播放。循环非常轻量，全部设置完毕后会自动休眠。
+    setInterval(applyVideoSettings, 1000);
+
+    // 2. 绑定原生视频事件（专治 iOS/Safari 延迟加载）
+    // 当用户手动点击播放瞬间，视频状态会改变，此时立即触发设置
+    setInterval(() => {
+        const video = document.querySelector('video.html5-main-video');
+        if (video && !video.dataset.enhancerAttached) {
+            video.dataset.enhancerAttached = 'true';
+            
+            video.addEventListener('playing', () => {
+                console.log('[YouTube 增强] 监听到视频开始播放，执行设置...');
+                applyVideoSettings();
+            });
+            
+            video.addEventListener('loadedmetadata', () => {
+                applyVideoSettings();
+            });
+        }
+    }, 2000); // 较低频率去寻找新的 video 元素
+
+    // ==========================================
+    // 自动跳过广告逻辑 (独立高频检测)
     // ==========================================
     if (CONFIG.autoSkipAds) {
         setInterval(() => {
-            // 跳过贴片视频广告的按钮
             const skipButtons = document.querySelectorAll('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button');
             skipButtons.forEach(btn => {
                 if (btn && btn.style.display !== 'none') {
                     btn.click();
-                    console.log('[YouTube 增强] 已跳过广告');
                 }
             });
             
-            // 关闭底部横幅文字图文广告
             const closeButtons = document.querySelectorAll('.ytp-ad-overlay-close-button');
             closeButtons.forEach(btn => {
                 if (btn && btn.style.display !== 'none') {
                     btn.click();
-                    console.log('[YouTube 增强] 已关闭横幅广告');
                 }
             });
-        }, 500); // 每0.5秒检查一次
+        }, 500);
     }
-
-    // ==========================================
-    // 路由监听器
-    // ==========================================
-    window.addEventListener('yt-navigate-finish', () => {
-        let intervalCount = 0;
-        const interval = setInterval(() => {
-            applyVideoSettings();
-            intervalCount++;
-            if (intervalCount >= MAX_ATTEMPTS) {
-                clearInterval(interval);
-            }
-        }, 1000); 
-    });
-
-    let initialCount = 0;
-    const initialInterval = setInterval(() => {
-        applyVideoSettings();
-        initialCount++;
-        if (initialCount >= MAX_ATTEMPTS) {
-            clearInterval(initialInterval);
-        }
-    }, 1000);
 
 })();
