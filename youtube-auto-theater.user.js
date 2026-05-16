@@ -1,15 +1,18 @@
 // ==UserScript==
 // @name         YouTube Auto Theater Mode
 // @name:zh-CN   YouTube 自动剧场模式
-// @namespace    http://tampermonkey.net/
-// @version      1.0
+// @namespace    https://github.com/AKAPZG
+// @version      1.0.0
 // @description  Automatically enable theater mode when watching YouTube videos
 // @description:zh-CN  在打开YouTube视频时默认自动切换为剧场模式
-// @author       Antigravity
+// @author       AKAPZG
+// @license      MIT
 // @match        *://*.youtube.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=youtube.com
-// @grant        none
+// @downloadURL  https://raw.githubusercontent.com/akapzg/My-Scripts/main/youtube-auto-theater.user.js
+// @updateURL    https://raw.githubusercontent.com/akapzg/My-Scripts/main/youtube-auto-theater.user.js
 // @run-at       document-end
+// @grant        none
 // ==/UserScript==
 
 (function() {
