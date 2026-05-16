@@ -2,7 +2,7 @@
 // @name         YouTube Auto Theater Mode
 // @name:zh-CN   YouTube 沉浸式观影增强
 // @namespace    https://github.com/AKAPZG
-// @version      1.3.0
+// @version      1.3.1
 // @description  Automatically enable theater mode, subtitles, auto-HD, auto-skip ads, and hide Shorts.
 // @description:zh-CN  自动开启剧场模式、字幕、最高画质、跳过广告、关闭连播，并隐藏首页推荐的Shorts。
 // @author       AKAPZG
@@ -104,13 +104,24 @@
             }
 
             // 2. 自动字幕 (CC)
-            if (!appliedStates.cc && ccButton) {
-                const isCcOn = ccButton.getAttribute('aria-pressed') === 'true';
-                if (ccButton.style.display !== 'none' && !isCcOn) {
-                    ccButton.click();
-                    console.log('[YouTube 增强] 已开启字幕');
+            if (!appliedStates.cc) {
+                // 优先尝试使用 YouTube Player 内部 API (最稳定，无视 UI 隐藏和触屏限制)
+                if (player && typeof player.toggleSubtitlesOn === 'function') {
+                    player.toggleSubtitlesOn();
+                    console.log('[YouTube 增强] 已通过 API 请求开启字幕');
+                    appliedStates.cc = true;
+                } 
+                // 降级方案：模拟点击 CC 按钮
+                else if (ccButton) {
+                    const isCcOn = ccButton.getAttribute('aria-pressed') === 'true';
+                    // 移除了 display !== 'none' 的限制，因为 iPad 上控制栏隐藏时也会导致失效
+                    if (!isCcOn) {
+                        // 在 iPad Safari 上，原生的 .click() 可能会被拦截或忽略，改用底层事件派发
+                        ccButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+                        console.log('[YouTube 增强] 已通过模拟点击开启字幕');
+                    }
+                    appliedStates.cc = true;
                 }
-                appliedStates.cc = true;
             }
 
             // 3. 自动关闭连播 (Autoplay)
