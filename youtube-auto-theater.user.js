@@ -2,9 +2,9 @@
 // @name         YouTube Auto Theater Mode
 // @name:zh-CN   YouTube 自动剧场模式
 // @namespace    https://github.com/AKAPZG
-// @version      1.1.0
-// @description  Automatically enable theater mode and subtitles when watching YouTube videos
-// @description:zh-CN  在打开YouTube视频时默认自动切换为剧场模式并开启字幕
+// @version      1.2.0
+// @description  Automatically enable theater mode and subtitles, and hide Shorts on the homepage.
+// @description:zh-CN  在打开YouTube视频时默认自动切换为剧场模式并开启字幕，同时隐藏首页推荐的Shorts。
 // @author       AKAPZG
 // @license      MIT
 // @match        *://*.youtube.com/*
@@ -17,6 +17,26 @@
 
 (function() {
     'use strict';
+
+    // 隐藏 Shorts 的 CSS 规则
+    const hideShortsCSS = `
+        /* 首页的 Shorts 推荐栏 (通过属性或内部包含识别) */
+        ytd-rich-section-renderer:has(ytd-rich-shelf-renderer[is-shorts]),
+        ytd-rich-shelf-renderer[is-shorts],
+        /* 相关视频里的 Shorts 推荐栏 / 搜索页的 Shorts */
+        ytd-reel-shelf-renderer,
+        /* 左侧导航栏的 Shorts 按钮 */
+        ytd-guide-entry-renderer:has([title="Shorts"]),
+        a#endpoint[title="Shorts"],
+        ytd-mini-guide-entry-renderer[aria-label="Shorts"] {
+            display: none !important;
+        }
+    `;
+
+    // 注入 CSS 到页面
+    const styleNode = document.createElement('style');
+    styleNode.innerHTML = hideShortsCSS;
+    document.head.appendChild(styleNode);
 
     let lastVideoId = null;
     let attemptCount = 0;
