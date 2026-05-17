@@ -2,7 +2,7 @@
 // @name         YouTube Immersive Enhancer
 // @name:zh-CN   YouTube 沉浸式观影增强
 // @namespace    https://github.com/AKAPZG
-// @version      1.4.2
+// @version      1.5.1
 // @description  Automatically enable theater mode, subtitles, auto-HD, auto-skip ads, and hide Shorts.
 // @description:zh-CN  自动开启剧场模式、字幕、最高画质、跳过广告、关闭连播，并隐藏首页推荐的Shorts。
 // @author       AKAPZG
@@ -35,15 +35,25 @@
     if (CONFIG.hideShorts) {
         const hideShortsCSS = `
             /* 1. 隐藏包含 Shorts 链接的整个推荐栏 (首页和搜索页) */
-            ytd-rich-section-renderer:has(a[href^="/shorts/"]),
-            ytd-reel-shelf-renderer:has(a[href^="/shorts/"]),
+            ytd-rich-section-renderer:has(a[href*="/shorts/"]),
+            ytd-reel-shelf-renderer:has(a[href*="/shorts/"]),
+            /* 1b. 新版 Shorts 货架容器 (2025-2026 A/B 测试) */
+            ytd-rich-shelf-renderer[is-shorts],
+            ytd-rich-section-renderer:has(ytd-rich-shelf-renderer[is-shorts]),
             /* 2. 隐藏混在普通视频网格中的单个 Shorts 视频 */
-            ytd-rich-item-renderer:has(a[href^="/shorts/"]),
+            ytd-rich-item-renderer:has(a[href*="/shorts/"]),
+            /* 2b. 隐藏搜索结果和推荐中带 Shorts 时间标记的视频 */
+            ytd-video-renderer:has(ytd-thumbnail-overlay-time-status-renderer[overlay-style="SHORTS"]),
             /* 3. 隐藏右侧相关推荐里的 Shorts */
-            ytd-compact-video-renderer:has(a[href^="/shorts/"]),
-            /* 4. 左侧导航栏的 Shorts 按钮 */
+            ytd-compact-video-renderer:has(a[href*="/shorts/"]),
+            /* 4. 左侧导航栏的 Shorts 按钮 (完整侧栏 + 迷你侧栏) */
             ytd-guide-entry-renderer:has(a[title="Shorts"]),
+            ytd-guide-entry-renderer:has(a#endpoint[title="Shorts"]),
+            ytd-mini-guide-entry-renderer:has(a[title="Shorts"]),
             ytd-mini-guide-entry-renderer[aria-label="Shorts"],
+            /* 5. 频道页的 Shorts 标签 */
+            yt-tab-shape[tab-title="Shorts"],
+            /* 6. 通用的 Shorts 链接入口 */
             a#endpoint[title="Shorts"] {
                 display: none !important;
             }
@@ -55,6 +65,55 @@
 
     let lastVideoId = null;
     let appliedStates = {};
+
+    // 平台检测：iPad/iOS 移动端没有剧场模式的概念
+    const isMobilePlatform = /iPad|iPhone|iPod|Android/i.test(navigator.userAgent)
+        || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+    /**
+     * 检测当前是否处于剧场模式（多重回退策略）
+     * YouTube 的 A/B 测试可能随时更换属性名
+     */
+    function isInTheaterMode() {
+        const watchFlexy = document.querySelector('ytd-watch-flexy');
+        if (!watchFlexy) return false;
+
+        // 策略1: 经典 theater 属性
+        if (watchFlexy.hasAttribute('theater')) return true;
+
+        // 策略2: full-bleed-player 属性（新版 A/B 测试）
+        if (watchFlexy.hasAttribute('full-bleed-player')) return true;
+
+        // 策略3: 播放器宽度启发式判断
+        // 剧场模式下播放器宽度通常 > 视口宽度的 85%
+        const player = document.getElementById('movie_player');
+        if (player) {
+            const ratio = player.clientWidth / window.innerWidth;
+            if (ratio > 0.85) return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * 通过模拟键盘快捷键 'T' 切换剧场模式
+     * 比 DOM click 更稳定，免疫 UI 改版和 A/B 测试
+     */
+    function toggleTheaterViaKeyboard() {
+        const player = document.getElementById('movie_player');
+        if (!player) return false;
+
+        const event = new KeyboardEvent('keydown', {
+            key: 't',
+            code: 'KeyT',
+            keyCode: 84,
+            which: 84,
+            bubbles: true,
+            cancelable: true
+        });
+        player.dispatchEvent(event);
+        return true;
+    }
 
     function applyVideoSettings() {
         if (!window.location.pathname.startsWith('/watch')) return;
@@ -91,23 +150,47 @@
 
         if (watchFlexy && player) {
             
-            // 1. 剧场模式 (UI 按钮，通常可以尽早点击)
-            if (!appliedStates.theater) {
-                const sizeButton = document.querySelector('.ytp-size-button');
-                if (sizeButton) {
-                    if (!watchFlexy.hasAttribute('theater')) {
-                        sizeButton.click();
-                        console.log('[YouTube 增强] 剧场模式已开启');
+            // 1. 剧场模式 (通过键盘快捷键 T 切换，避免 DOM 选择器失效)
+            if (!appliedStates.theater && !isMobilePlatform) {
+                if (!isInTheaterMode()) {
+                    if (toggleTheaterViaKeyboard()) {
+                        console.log('[YouTube 增强] 剧场模式已开启 (键盘快捷键)');
+                        // 延迟标记完成，等待 YouTube 内部状态更新
+                        setTimeout(() => {
+                            // 二次确认：如果仍未进入剧场模式，回退到 DOM 点击
+                            if (!isInTheaterMode()) {
+                                const sizeButton = document.querySelector('.ytp-size-button')
+                                    || document.querySelector('button[data-tooltip-target-id="a11y-hint-theater"]')
+                                    || document.querySelector('button[aria-label*="Theater"]')
+                                    || document.querySelector('button[aria-label*="theater"]')
+                                    || document.querySelector('button[aria-label*="剧场"]');
+                                if (sizeButton) {
+                                    sizeButton.click();
+                                    console.log('[YouTube 增强] 剧场模式已开启 (DOM 回退)');
+                                }
+                            }
+                            appliedStates.theater = true;
+                        }, 300);
                     }
+                } else {
+                    // 已经是剧场模式，标记完成
                     appliedStates.theater = true;
                 }
             }
 
-            // 2. 关闭连播 (UI 按钮)
+            // 2. 关闭连播 (UI 按钮，兼容新旧两种 DOM 结构)
             if (!appliedStates.autoplay) {
-                const autonavToggle = document.querySelector('.ytp-autonav-toggle-button');
+                // 新版: 按钮使用 aria-label="Autoplay is on/off" 而非 aria-checked
+                const autonavToggle = document.querySelector('.ytp-autonav-toggle-button')
+                    || document.querySelector('button.ytp-autonav-toggle')
+                    || document.querySelector('[data-tooltip-target-id="ytp-autonav-toggle-button"]');
                 if (autonavToggle) {
-                    const isAutoplayOn = autonavToggle.getAttribute('aria-checked') === 'true';
+                    const ariaLabel = (autonavToggle.getAttribute('aria-label') || '').toLowerCase();
+                    const ariaChecked = autonavToggle.getAttribute('aria-checked');
+                    // 兼容两种判断方式：aria-label 文本 或 aria-checked 属性
+                    const isAutoplayOn = ariaLabel.includes('autoplay is on')
+                        || ariaLabel.includes('连播已开启')
+                        || ariaChecked === 'true';
                     if (isAutoplayOn) {
                         autonavToggle.click();
                         console.log('[YouTube 增强] 自动连播已关闭');
@@ -120,8 +203,9 @@
             // 在 iPad 上，必须等 video 至少 readyState > 0 或正在播放才能有效设置
             if (isVideoReady || isVideoPlaying) {
                 
-                // 3. 自动字幕 (优先内部 API，兼容移动端)
+                // 3. 自动字幕 (多重策略：内部 API → 键盘快捷键 C → DOM 点击)
                 if (!appliedStates.cc) {
+                    // 策略1: 内部 API (最可靠，但不一定存在)
                     if (typeof player.toggleSubtitlesOn === 'function') {
                         player.toggleSubtitlesOn();
                         console.log('[YouTube 增强] 已请求开启字幕 (API)');
@@ -129,12 +213,23 @@
                     } else {
                         const ccButton = document.querySelector('.ytp-subtitles-button');
                         if (ccButton) {
-                            const isCcOn = ccButton.getAttribute('aria-pressed') === 'true';
-                            if (!isCcOn) {
-                                ccButton.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
-                                console.log('[YouTube 增强] 已请求开启字幕 (点击)');
+                            const ariaLabel = (ccButton.getAttribute('aria-label') || '').toLowerCase();
+                            // 如果字幕不可用（unavailable），则跳过并标记完成
+                            if (ariaLabel.includes('unavailable') || ariaLabel.includes('不可用')) {
+                                appliedStates.cc = true;
+                            } else {
+                                const isCcOn = ccButton.getAttribute('aria-pressed') === 'true';
+                                if (!isCcOn) {
+                                    // 策略2: 键盘快捷键 C (与剧场模式同理，更抗 UI 改版)
+                                    const ccEvent = new KeyboardEvent('keydown', {
+                                        key: 'c', code: 'KeyC', keyCode: 67, which: 67,
+                                        bubbles: true, cancelable: true
+                                    });
+                                    player.dispatchEvent(ccEvent);
+                                    console.log('[YouTube 增强] 已请求开启字幕 (键盘快捷键)');
+                                }
+                                appliedStates.cc = true;
                             }
-                            appliedStates.cc = true;
                         }
                     }
                 }
