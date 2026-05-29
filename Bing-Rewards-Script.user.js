@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Microsoft Bing Rewards Script by AKAPZG
 // @namespace    https://github.com/AKAPZG
-// @version      1.1.1
+// @version      1.1.2
 // @description  Automatically completes Microsoft Rewards daily search tasks with a built-in English keyword list.
 // @author       AKAPZG
 // @license      MIT
