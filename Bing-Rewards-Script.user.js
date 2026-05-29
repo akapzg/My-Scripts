@@ -124,8 +124,8 @@
 
     GM_addStyle(`
         #reward-task { 
-            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; 
-            background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(8px); 
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.4); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); 
             z-index: 99999; display: flex; align-items: center; justify-content: center;
             font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
             animation: fadeIn 0.3s ease;
