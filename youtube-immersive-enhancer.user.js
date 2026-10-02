@@ -2,9 +2,9 @@
 // @name         YouTube Immersive Enhancer
 // @name:zh-CN   YouTube 沉浸式观影增强
 // @namespace    https://github.com/AKAPZG
-// @version      1.5.1
-// @description  Automatically enable theater mode, subtitles, auto-HD, auto-skip ads, and hide Shorts.
-// @description:zh-CN  自动开启剧场模式、字幕、最高画质、跳过广告、关闭连播，并隐藏首页推荐的Shorts。
+// @version      1.6.0
+// @description  Automatically enable theater mode, subtitles, auto-HD, speed through ads, close autoplay, and clean page ads/Shorts/pause overlay.
+// @description:zh-CN  自动开启剧场模式、字幕、最高画质、秒跳广告、关闭连播，屏蔽Shorts、暂停推荐遮罩与页面推广广告。
 // @author       AKAPZG
 // @license      MIT
 // @match        *://*.youtube.com/*
@@ -28,12 +28,16 @@
         preferredSpeed: 1.0,    // 默认播放倍速 (1.0为正常速度, 可改为1.25, 1.5等)
         disableAutoplay: true,  // 关闭自动连播 (倒计时播放下一个视频)
         autoSkipAds: true,      // 自动跳过贴片和横幅广告
-        hideShorts: true        // 隐藏首页和侧边栏的 Shorts
+        hideShorts: true,       // 隐藏首页和侧边栏的 Shorts
+        hidePauseOverlay: true, // 隐藏暂停视频时弹出的“更多视频”半透明推荐卡片
+        cleanPageAds: true      // 净化视频流与侧边栏的静态赞助商推广卡片
     };
 
-    // 隐藏 Shorts 的 CSS 规则
+    // 注入页面净化 CSS 规则 (Shorts、暂停遮罩、推广卡片)
+    let customCSS = '';
+
     if (CONFIG.hideShorts) {
-        const hideShortsCSS = `
+        customCSS += `
             /* 1. 隐藏包含 Shorts 链接的整个推荐栏 (首页和搜索页) */
             ytd-rich-section-renderer:has(a[href*="/shorts/"]),
             ytd-reel-shelf-renderer:has(a[href*="/shorts/"]),
@@ -58,17 +62,53 @@
                 display: none !important;
             }
         `;
+    }
+
+    if (CONFIG.hidePauseOverlay) {
+        customCSS += `
+            /* 7. 屏蔽暂停时弹出的“更多视频”半透明推荐遮罩 (提升暂停/截图纯净度) */
+            .ytp-pause-overlay,
+            .ytp-pause-overlay-container {
+                display: none !important;
+            }
+        `;
+    }
+
+    if (CONFIG.cleanPageAds) {
+        customCSS += `
+            /* 8. 净化页面中的静态推广与广告插槽 (视频下方横幅、侧栏置顶推广等) */
+            #player-ads,
+            ytd-ad-slot-renderer,
+            ytd-in-feed-ad-layout-renderer,
+            ytd-banner-promo-renderer,
+            ytd-statement-banner-renderer,
+            #masthead-ad {
+                display: none !important;
+            }
+        `;
+    }
+
+    if (customCSS) {
         const styleNode = document.createElement('style');
-        styleNode.innerHTML = hideShortsCSS;
+        styleNode.innerHTML = customCSS;
         document.head.appendChild(styleNode);
     }
 
     let lastVideoId = null;
     let appliedStates = {};
+    let theaterAttempts = 0;
+    let wasAdPlaying = false;
+    let originalMutedState = false;
 
-    // 平台检测：iPad/iOS 移动端没有剧场模式的概念
-    const isMobilePlatform = /iPad|iPhone|iPod|Android/i.test(navigator.userAgent)
-        || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    // 触控设备检测 (如 iPad Safari 触屏环境)
+    const isTouchDevice = ('ontouchstart' in window)
+        || (navigator.maxTouchPoints > 0)
+        || (/iPad|iPhone|iPod|Android/i.test(navigator.userAgent));
+
+    // 视口检测：iPad 桌面版或桌面浏览器在横屏（宽度 >= 992px）下才支持剧场模式；竖屏下本身为单列全宽布局无需切换
+    function shouldEnableTheater() {
+        return window.innerWidth >= 992;
+    }
 
     /**
      * 检测当前是否处于剧场模式（多重回退策略）
@@ -96,23 +136,51 @@
     }
 
     /**
-     * 通过模拟键盘快捷键 'T' 切换剧场模式
-     * 比 DOM click 更稳定，免疫 UI 改版和 A/B 测试
+     * 切换剧场模式（多重策略：触屏优先 DOM 点击，桌面优先按键快捷键）
      */
-    function toggleTheaterViaKeyboard() {
+    function triggerTheaterMode() {
         const player = document.getElementById('movie_player');
-        if (!player) return false;
+        const sizeButton = document.querySelector('.ytp-size-button')
+            || document.querySelector('button[data-tooltip-target-id="a11y-hint-theater"]')
+            || document.querySelector('button[aria-label*="Theater"]')
+            || document.querySelector('button[aria-label*="theater"]')
+            || document.querySelector('button[aria-label*="剧场"]');
 
-        const event = new KeyboardEvent('keydown', {
-            key: 't',
-            code: 'KeyT',
-            keyCode: 84,
-            which: 84,
-            bubbles: true,
-            cancelable: true
-        });
-        player.dispatchEvent(event);
-        return true;
+        // 触控设备 (如 iPad Safari 桌面模式): 优先通过 DOM 按钮触发点击
+        if (isTouchDevice && sizeButton) {
+            sizeButton.click();
+            console.log('[YouTube 增强] 尝试开启剧场模式 (DOM 点击)');
+            return true;
+        }
+
+        // 桌面端或无按钮时: 优先模拟键盘快捷键 'T'
+        if (player) {
+            try { player.focus(); } catch (e) {}
+            const event = new KeyboardEvent('keydown', {
+                key: 't',
+                code: 'KeyT',
+                keyCode: 84,
+                which: 84,
+                bubbles: true,
+                cancelable: true
+            });
+            player.dispatchEvent(event);
+            console.log('[YouTube 增强] 尝试开启剧场模式 (键盘快捷键)');
+
+            // 针对部分触控设备可能需要双重触发保障
+            if (sizeButton && isTouchDevice) {
+                sizeButton.click();
+            }
+            return true;
+        }
+
+        if (sizeButton) {
+            sizeButton.click();
+            console.log('[YouTube 增强] 尝试开启剧场模式 (DOM 点击回退)');
+            return true;
+        }
+
+        return false;
     }
 
     function applyVideoSettings() {
@@ -125,6 +193,7 @@
         // 如果检测到打开了新的视频，重置状态
         if (lastVideoId !== videoId) {
             lastVideoId = videoId;
+            theaterAttempts = 0;
             appliedStates = {
                 theater: !CONFIG.enableTheater,
                 cc: !CONFIG.enableCC,
@@ -150,31 +219,26 @@
 
         if (watchFlexy && player) {
             
-            // 1. 剧场模式 (通过键盘快捷键 T 切换，避免 DOM 选择器失效)
-            if (!appliedStates.theater && !isMobilePlatform) {
-                if (!isInTheaterMode()) {
-                    if (toggleTheaterViaKeyboard()) {
-                        console.log('[YouTube 增强] 剧场模式已开启 (键盘快捷键)');
-                        // 延迟标记完成，等待 YouTube 内部状态更新
-                        setTimeout(() => {
-                            // 二次确认：如果仍未进入剧场模式，回退到 DOM 点击
-                            if (!isInTheaterMode()) {
-                                const sizeButton = document.querySelector('.ytp-size-button')
-                                    || document.querySelector('button[data-tooltip-target-id="a11y-hint-theater"]')
-                                    || document.querySelector('button[aria-label*="Theater"]')
-                                    || document.querySelector('button[aria-label*="theater"]')
-                                    || document.querySelector('button[aria-label*="剧场"]');
-                                if (sizeButton) {
-                                    sizeButton.click();
-                                    console.log('[YouTube 增强] 剧场模式已开启 (DOM 回退)');
-                                }
-                            }
-                            appliedStates.theater = true;
-                        }, 300);
-                    }
-                } else {
+            // 1. 剧场模式 (多策略兼容：iPad Safari 触屏优先 DOM 点击，PC 优先快捷键，带确认重试机制)
+            if (!appliedStates.theater) {
+                if (!shouldEnableTheater()) {
+                    // 视口宽度不足 992px（如 iPad 竖屏），原生已是单列通栏布局，无需且无法切换剧场模式
+                    appliedStates.theater = true;
+                } else if (isInTheaterMode()) {
                     // 已经是剧场模式，标记完成
                     appliedStates.theater = true;
+                } else {
+                    triggerTheaterMode();
+                    theaterAttempts++;
+                    // 延迟 500ms 确认状态，成功才标记完成；若未成功且未超限则允许后续轮询重试（最多重试 6 次）
+                    setTimeout(() => {
+                        if (isInTheaterMode()) {
+                            appliedStates.theater = true;
+                            console.log('[YouTube 增强] 剧场模式已成功开启');
+                        } else if (theaterAttempts >= 6) {
+                            appliedStates.theater = true; // 超过重试上限，停止尝试以防死循环
+                        }
+                    }, 500);
                 }
             }
 
@@ -203,9 +267,9 @@
             // 在 iPad 上，必须等 video 至少 readyState > 0 或正在播放才能有效设置
             if (isVideoReady || isVideoPlaying) {
                 
-                // 3. 自动字幕 (多重策略：内部 API → 键盘快捷键 C → DOM 点击)
+                // 3. 自动字幕 (多重策略：内部 API → 触屏 DOM 点击 → 键盘快捷键 C)
                 if (!appliedStates.cc) {
-                    // 策略1: 内部 API (最可靠，但不一定存在)
+                    // 策略1: 内部 API (最直接)
                     if (typeof player.toggleSubtitlesOn === 'function') {
                         player.toggleSubtitlesOn();
                         console.log('[YouTube 增强] 已请求开启字幕 (API)');
@@ -220,13 +284,19 @@
                             } else {
                                 const isCcOn = ccButton.getAttribute('aria-pressed') === 'true';
                                 if (!isCcOn) {
-                                    // 策略2: 键盘快捷键 C (与剧场模式同理，更抗 UI 改版)
-                                    const ccEvent = new KeyboardEvent('keydown', {
-                                        key: 'c', code: 'KeyC', keyCode: 67, which: 67,
-                                        bubbles: true, cancelable: true
-                                    });
-                                    player.dispatchEvent(ccEvent);
-                                    console.log('[YouTube 增强] 已请求开启字幕 (键盘快捷键)');
+                                    // 策略2: 触控设备 (如 iPad Safari) 优先点击 DOM 按钮
+                                    if (isTouchDevice) {
+                                        ccButton.click();
+                                        console.log('[YouTube 增强] 已请求开启字幕 (DOM 点击)');
+                                    } else {
+                                        // 策略3: 桌面优先键盘快捷键 C
+                                        const ccEvent = new KeyboardEvent('keydown', {
+                                            key: 'c', code: 'KeyC', keyCode: 67, which: 67,
+                                            bubbles: true, cancelable: true
+                                        });
+                                        player.dispatchEvent(ccEvent);
+                                        console.log('[YouTube 增强] 已请求开启字幕 (键盘快捷键)');
+                                    }
                                 }
                                 appliedStates.cc = true;
                             }
@@ -234,57 +304,76 @@
                     }
                 }
 
-                // 4. 自动最高画质
-                if (!appliedStates.quality && typeof player.setPlaybackQualityRange === 'function') {
-                    player.setPlaybackQualityRange('highres', 'highres'); 
-                    console.log('[YouTube 增强] 已请求最高画质');
+                // 4. 自动最高画质 (增强策略：优先获取当前视频支持的最高画质档位)
+                if (!appliedStates.quality) {
+                    let targetQuality = 'highres';
+                    if (typeof player.getAvailableQualityLevels === 'function') {
+                        const levels = player.getAvailableQualityLevels();
+                        if (Array.isArray(levels) && levels.length > 0) {
+                            targetQuality = levels[0];
+                        }
+                    }
+                    if (typeof player.setPlaybackQualityRange === 'function') {
+                        player.setPlaybackQualityRange(targetQuality, targetQuality);
+                    }
+                    if (typeof player.setPlaybackQuality === 'function') {
+                        player.setPlaybackQuality(targetQuality);
+                    }
+                    console.log(`[YouTube 增强] 已请求最高画质 (${targetQuality})`);
                     appliedStates.quality = true;
                 }
 
-                // 5. 自动播放倍速
-                if (!appliedStates.speed && typeof player.setPlaybackRate === 'function') {
-                    if (video.playbackRate !== CONFIG.preferredSpeed) {
+                // 5. 自动播放倍速 (API + 原生 video 兜底)
+                if (!appliedStates.speed) {
+                    if (typeof player.setPlaybackRate === 'function') {
                         player.setPlaybackRate(CONFIG.preferredSpeed);
-                        console.log(`[YouTube 增强] 已设置播放倍速为 ${CONFIG.preferredSpeed}x`);
                     }
+                    if (video && video.playbackRate !== CONFIG.preferredSpeed) {
+                        video.playbackRate = CONFIG.preferredSpeed;
+                    }
+                    console.log(`[YouTube 增强] 已设置播放倍速为 ${CONFIG.preferredSpeed}x`);
                     appliedStates.speed = true;
                 }
             }
         }
-    }
 
-    // ==========================================
-    // 核心监控逻辑
-    // ==========================================
-
-    // 1. 低频循环检测：移除原来的 MAX_ATTEMPTS 限制，
-    // 因为在 Safari 上用户可能过了很久才点击播放。循环非常轻量，全部设置完毕后会自动休眠。
-    setInterval(applyVideoSettings, 1000);
-
-    // 2. 绑定原生视频事件（专治 iOS/Safari 延迟加载）
-    // 当用户手动点击播放瞬间，视频状态会改变，此时立即触发设置
-    setInterval(() => {
-        const video = document.querySelector('video.html5-main-video');
+        // 绑定原生视频事件（专治 iOS/Safari 延迟加载）
         if (video && !video.dataset.enhancerAttached) {
             video.dataset.enhancerAttached = 'true';
-            
             video.addEventListener('playing', () => {
-                console.log('[YouTube 增强] 监听到视频开始播放，执行设置...');
                 applyVideoSettings();
             });
-            
             video.addEventListener('loadedmetadata', () => {
                 applyVideoSettings();
             });
         }
-    }, 2000); // 较低频率去寻找新的 video 元素
+    }
+
+    // ==========================================
+    // 核心监控与事件驱动
+    // ==========================================
+
+    // 1. YouTube 单页 SPA 导航监听 (切视频 0 延迟即时生效)
+    document.addEventListener('yt-navigate-finish', () => {
+        lastVideoId = null;
+        applyVideoSettings();
+    });
+    window.addEventListener('yt-page-data-updated', () => {
+        applyVideoSettings();
+    });
+
+    // 2. 轻量低频轮询 (每秒一次，全部设置完毕后内部极速 return)
+    setInterval(applyVideoSettings, 1000);
 
     // ==========================================
     // 自动跳过广告 & 弹窗清理逻辑 (独立高频检测)
     // ==========================================
     setInterval(() => {
         if (CONFIG.autoSkipAds) {
-            const skipButtons = document.querySelectorAll('.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button');
+            // 1. 尝试点击各类跳过按钮 (兼容新旧类名及插槽)
+            const skipButtons = document.querySelectorAll(
+                '.ytp-ad-skip-button, .ytp-ad-skip-button-modern, .ytp-skip-ad-button, button.ytp-ad-skip-button, .ytp-ad-skip-button-slot button'
+            );
             skipButtons.forEach(btn => {
                 if (btn && btn.style.display !== 'none') {
                     btn.click();
@@ -297,6 +386,29 @@
                     btn.click();
                 }
             });
+
+            // 2. 不可跳过广告极速快进 (秒过贴片广告)
+            const player = document.getElementById('movie_player');
+            const video = document.querySelector('video.html5-main-video');
+            if (player && video) {
+                const isAdShowing = player.classList.contains('ad-showing') || player.classList.contains('ad-interrupting');
+                if (isAdShowing) {
+                    if (!wasAdPlaying) {
+                        wasAdPlaying = true;
+                        originalMutedState = video.muted;
+                    }
+                    video.muted = true;
+                    video.playbackRate = 16;
+                    if (Number.isFinite(video.duration) && video.duration > 0) {
+                        video.currentTime = video.duration;
+                    }
+                } else if (wasAdPlaying) {
+                    // 广告播放完毕，恢复原声音与用户配置倍速
+                    wasAdPlaying = false;
+                    video.muted = originalMutedState;
+                    video.playbackRate = CONFIG.preferredSpeed;
+                }
+            }
         }
 
         // 自动关闭因为强制切换画质导致的 "Experiencing interruptions?" (播放不流畅/中断) 提示
