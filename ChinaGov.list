@@ -1,0 +1,50 @@
+# ==============================================================
+# 大陆专网与民生政务服务规则集 (ChinaGov.list)
+# 作用: 仅限中国大陆境内 IP 访问的政务、民生、教育、交通服务
+# 适用于: 配合 Shadowrocket 路由到国内自建节点
+# ==============================================================
+
+# ----------------- 1. 成都本地教育/民生/招考 -----------------
+# 成都市义务教育招生入学服务平台 / 成都招考
+DOMAIN-SUFFIX,cdzk.org
+DOMAIN-SUFFIX,cdzk.com
+DOMAIN-SUFFIX,cdyzb.net
+# 天府市民云 / 天府蓉易办 / 蓉易享
+DOMAIN-SUFFIX,tfsmy.com
+DOMAIN-SUFFIX,tfsmy.chengdu.gov.cn
+DOMAIN-KEYWORD,tfsmy
+# 成都公积金 / 医保 / 社保
+DOMAIN-SUFFIX,cdzfgjj.gov.cn
+DOMAIN-SUFFIX,cdyb.chengdu.gov.cn
+
+# ----------------- 2. 四川省级政务与便民 -----------------
+# 四川政务服务网 / 天府通办
+DOMAIN-SUFFIX,sczwfw.gov.cn
+DOMAIN-SUFFIX,sc.gov.cn
+DOMAIN-KEYWORD,tftb
+# 四川教育考试院 / 招考
+DOMAIN-SUFFIX,sceea.cn
+
+# ----------------- 3. 全国交通与公安专网 -----------------
+# 全国交管 12123 综合服务平台
+DOMAIN-SUFFIX,122.gov.cn
+DOMAIN-KEYWORD,12123
+# 铁路 12306 (在境外风控高时走国内节点)
+DOMAIN-SUFFIX,12306.cn
+
+# ----------------- 4. 国家政务、税务、社保 -----------------
+# 全国所有政府二级/三级域名通配
+DOMAIN-SUFFIX,gov.cn
+# 国家政务服务平台
+DOMAIN-SUFFIX,gjzwfw.gov.cn
+# 国家税务总局 (个人所得税 App、电子税务局)
+DOMAIN-SUFFIX,chinatax.gov.cn
+DOMAIN-KEYWORD,chinatax
+# 人社部 / 全国人社政务 / 掌上 12333 / 电子社保卡
+DOMAIN-SUFFIX,mohrss.gov.cn
+DOMAIN-SUFFIX,12333.gov.cn
+DOMAIN-KEYWORD,12333
+# 国家医保服务平台
+DOMAIN-SUFFIX,nhsa.gov.cn
+# 中国政府网
+DOMAIN-SUFFIX,gov.cn
