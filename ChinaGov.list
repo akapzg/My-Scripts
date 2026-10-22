@@ -5,10 +5,11 @@
 # ==============================================================
 
 # ----------------- 1. 成都本地教育/民生/招考 -----------------
-# 成都市义务教育招生入学服务平台 / 成都招考
+# 成都市义务教育招生入学服务平台 / 成都招考 / 成都教育
 DOMAIN-SUFFIX,cdzk.org
 DOMAIN-SUFFIX,cdzk.com
 DOMAIN-SUFFIX,cdyzb.net
+DOMAIN-SUFFIX,cdeduypt.cn
 # 天府市民云 / 天府蓉易办 / 蓉易享
 DOMAIN-SUFFIX,tfsmy.com
 DOMAIN-SUFFIX,tfsmy.chengdu.gov.cn
