@@ -2,16 +2,16 @@
 // @name         YouTube Immersive Enhancer
 // @name:zh-CN   YouTube 沉浸式观影增强
 // @namespace    https://github.com/AKAPZG
-// @version      1.6.0
+// @version      1.7.0
 // @description  Automatically enable theater mode, subtitles, auto-HD, speed through ads, close autoplay, and clean page ads/Shorts/pause overlay.
-// @description:zh-CN  自动开启剧场模式、字幕、最高画质、秒跳广告、关闭连播，屏蔽Shorts、暂停推荐遮罩与页面推广广告。
+// @description:zh-CN  自动开启剧场模式、字幕、最高画质、秒跳广告、关闭连播，屏蔽Shorts、暂停推荐遮罩、片尾卡片与页面推广广告。
 // @author       AKAPZG
 // @license      MIT
 // @match        *://*.youtube.com/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=youtube.com
 // @downloadURL  https://raw.githubusercontent.com/akapzg/My-Scripts/main/youtube-immersive-enhancer.user.js
 // @updateURL    https://raw.githubusercontent.com/akapzg/My-Scripts/main/youtube-immersive-enhancer.user.js
-// @run-at       document-end
+// @run-at       document-start
 // @grant        none
 // ==/UserScript==
 
@@ -28,37 +28,53 @@
         preferredSpeed: 1.0,    // 默认播放倍速 (1.0为正常速度, 可改为1.25, 1.5等)
         disableAutoplay: true,  // 关闭自动连播 (倒计时播放下一个视频)
         autoSkipAds: true,      // 自动跳过贴片和横幅广告
-        hideShorts: true,       // 隐藏首页和侧边栏的 Shorts
-        hidePauseOverlay: true, // 隐藏暂停视频时弹出的“更多视频”半透明推荐卡片
-        cleanPageAds: true      // 净化视频流与侧边栏的静态赞助商推广卡片
+        hideShorts: true,       // 隐藏首页、搜索页和侧边栏的 Shorts
+        hidePauseOverlay: true, // 隐藏暂停遮罩、片尾推荐卡片、右上角信息卡与水印
+        cleanPageAds: true      // 净化视频流、商品栏与侧边栏的静态推广卡片
     };
 
-    // 注入页面净化 CSS 规则 (Shorts、暂停遮罩、推广卡片)
+    // 0. 预设 YouTube 官方剧场模式 Cookie (wide=1)，使页面原生以剧场模式初始化
+    if (CONFIG.enableTheater) {
+        document.cookie = 'wide=1; domain=.youtube.com; path=/; max-age=31536000; SameSite=Lax';
+    }
+
+    // 注入页面净化 CSS 规则 (Shorts、暂停遮罩、片尾干扰、推广卡片)
     let customCSS = '';
 
     if (CONFIG.hideShorts) {
         customCSS += `
-            /* 1. 隐藏包含 Shorts 链接的整个推荐栏 (首页和搜索页) */
-            ytd-rich-section-renderer:has(a[href*="/shorts/"]),
-            ytd-reel-shelf-renderer:has(a[href*="/shorts/"]),
-            /* 1b. 新版 Shorts 货架容器 (2025-2026 A/B 测试) */
+            /* 1. 直接隐藏所有 Shorts 专用货架与新版 ViewModel 容器 (无需等待内部链接渲染) */
+            ytd-reel-shelf-renderer,
+            ytd-reel-item-renderer,
+            ytm-shorts-lockup-view-model,
+            ytm-shorts-lockup-view-model-v2,
             ytd-rich-shelf-renderer[is-shorts],
+            [is-shorts],
+            /* 2. 隐藏包含 Shorts 的新版组件容器 (2025-2026 ViewModel 架构) */
+            ytd-rich-section-renderer:has(a[href*="/shorts/"]),
             ytd-rich-section-renderer:has(ytd-rich-shelf-renderer[is-shorts]),
-            /* 2. 隐藏混在普通视频网格中的单个 Shorts 视频 */
+            ytd-rich-section-renderer:has(ytm-shorts-lockup-view-model),
+            grid-shelf-view-model:has(a[href*="/shorts/"]),
+            grid-shelf-view-model:has(ytm-shorts-lockup-view-model),
+            ytd-shelf-renderer:has(a[href*="/shorts/"]),
+            ytd-item-section-renderer:has(ytd-reel-shelf-renderer),
+            ytd-item-section-renderer:has(grid-shelf-view-model:has(a[href*="/shorts/"])),
+            /* 3. 隐藏混在列表与右侧推荐中的单个 Shorts 视频 */
             ytd-rich-item-renderer:has(a[href*="/shorts/"]),
-            /* 2b. 隐藏搜索结果和推荐中带 Shorts 时间标记的视频 */
-            ytd-video-renderer:has(ytd-thumbnail-overlay-time-status-renderer[overlay-style="SHORTS"]),
-            /* 3. 隐藏右侧相关推荐里的 Shorts */
+            ytd-video-renderer:has(a[href*="/shorts/"]),
             ytd-compact-video-renderer:has(a[href*="/shorts/"]),
-            /* 4. 左侧导航栏的 Shorts 按钮 (完整侧栏 + 迷你侧栏) */
+            yt-lockup-view-model:has(a[href*="/shorts/"]),
+            ytd-video-renderer:has(ytd-thumbnail-overlay-time-status-renderer[overlay-style="SHORTS"]),
+            /* 4. 左侧导航栏与底栏 Shorts 入口 */
             ytd-guide-entry-renderer:has(a[title="Shorts"]),
-            ytd-guide-entry-renderer:has(a#endpoint[title="Shorts"]),
+            ytd-guide-entry-renderer:has(a[href*="/shorts"]),
             ytd-mini-guide-entry-renderer:has(a[title="Shorts"]),
             ytd-mini-guide-entry-renderer[aria-label="Shorts"],
-            /* 5. 频道页的 Shorts 标签 */
             yt-tab-shape[tab-title="Shorts"],
-            /* 6. 通用的 Shorts 链接入口 */
-            a#endpoint[title="Shorts"] {
+            a#endpoint[title="Shorts"],
+            /* 5. 隐藏 Playables 小游戏推荐栏 */
+            ytd-rich-section-renderer:has(a[href*="/playables"]),
+            ytd-game-card-renderer {
                 display: none !important;
             }
         `;
@@ -66,9 +82,14 @@
 
     if (CONFIG.hidePauseOverlay) {
         customCSS += `
-            /* 7. 屏蔽暂停时弹出的“更多视频”半透明推荐遮罩 (提升暂停/截图纯净度) */
+            /* 屏蔽暂停遮罩、片尾遮挡画面的推荐卡片(.ytp-ce-element)、右上角推荐气泡与右下角订阅水印 */
             .ytp-pause-overlay,
-            .ytp-pause-overlay-container {
+            .ytp-pause-overlay-container,
+            .ytp-ce-element,
+            .ytp-cards-teaser,
+            .ytp-cards-button,
+            .iv-branding,
+            .annotation {
                 display: none !important;
             }
         `;
@@ -76,23 +97,34 @@
 
     if (CONFIG.cleanPageAds) {
         customCSS += `
-            /* 8. 净化页面中的静态推广与广告插槽 (视频下方横幅、侧栏置顶推广等) */
+            /* 净化页面静态推广、带货商品架、购票横幅、置顶赞助与会员促销弹窗 */
             #player-ads,
+            #masthead-ad,
             ytd-ad-slot-renderer,
             ytd-in-feed-ad-layout-renderer,
             ytd-banner-promo-renderer,
             ytd-statement-banner-renderer,
-            #masthead-ad {
+            ytd-merch-shelf-renderer,
+            ytd-ticket-shelf-renderer,
+            ytd-brand-video-shelf-renderer,
+            ytd-brand-video-singleton-renderer,
+            ytd-promoted-sparkles-web-renderer,
+            ytd-promoted-sparkles-text-search-renderer,
+            ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-structured-description-Product"] {
                 display: none !important;
             }
         `;
     }
 
-    if (customCSS) {
+    function injectCSS() {
+        if (!customCSS || document.getElementById('yt-immersive-style')) return;
         const styleNode = document.createElement('style');
-        styleNode.innerHTML = customCSS;
-        document.head.appendChild(styleNode);
+        styleNode.id = 'yt-immersive-style';
+        styleNode.textContent = customCSS;
+        (document.head || document.documentElement).appendChild(styleNode);
     }
+    injectCSS();
+    document.addEventListener('DOMContentLoaded', injectCSS);
 
     let lastVideoId = null;
     let appliedStates = {};
@@ -105,40 +137,22 @@
         || (navigator.maxTouchPoints > 0)
         || (/iPad|iPhone|iPod|Android/i.test(navigator.userAgent));
 
-    // 视口检测：iPad 桌面版或桌面浏览器在横屏（宽度 >= 992px）下才支持剧场模式；竖屏下本身为单列全宽布局无需切换
-    function shouldEnableTheater() {
-        return window.innerWidth >= 992;
-    }
-
     /**
-     * 检测当前是否处于剧场模式（多重回退策略）
-     * YouTube 的 A/B 测试可能随时更换属性名
+     * 检测当前是否处于剧场模式（严格校验 DOM 属性，移除在 iPad 上会误判的宽度比例检测）
      */
     function isInTheaterMode() {
         const watchFlexy = document.querySelector('ytd-watch-flexy');
         if (!watchFlexy) return false;
-
-        // 策略1: 经典 theater 属性
-        if (watchFlexy.hasAttribute('theater')) return true;
-
-        // 策略2: full-bleed-player 属性（新版 A/B 测试）
-        if (watchFlexy.hasAttribute('full-bleed-player')) return true;
-
-        // 策略3: 播放器宽度启发式判断
-        // 剧场模式下播放器宽度通常 > 视口宽度的 85%
-        const player = document.getElementById('movie_player');
-        if (player) {
-            const ratio = player.clientWidth / window.innerWidth;
-            if (ratio > 0.85) return true;
-        }
-
-        return false;
+        return watchFlexy.hasAttribute('theater') || watchFlexy.hasAttribute('full-bleed-player');
     }
 
     /**
-     * 切换剧场模式（多重策略：触屏优先 DOM 点击，桌面优先按键快捷键）
+     * 切换剧场模式（四重策略：Cookie + Polymer 自定义事件 + DOM 按钮点击 + 属性强制挂载）
      */
     function triggerTheaterMode() {
+        document.cookie = 'wide=1; domain=.youtube.com; path=/; max-age=31536000; SameSite=Lax';
+
+        const watchFlexy = document.querySelector('ytd-watch-flexy');
         const player = document.getElementById('movie_player');
         const sizeButton = document.querySelector('.ytp-size-button')
             || document.querySelector('button[data-tooltip-target-id="a11y-hint-theater"]')
@@ -146,41 +160,42 @@
             || document.querySelector('button[aria-label*="theater"]')
             || document.querySelector('button[aria-label*="剧场"]');
 
-        // 触控设备 (如 iPad Safari 桌面模式): 优先通过 DOM 按钮触发点击
-        if (isTouchDevice && sizeButton) {
-            sizeButton.click();
-            console.log('[YouTube 增强] 尝试开启剧场模式 (DOM 点击)');
-            return true;
+        // 策略1: 触发 YouTube Polymer 组件原生内部剧场切换事件 (无视按钮隐藏与 WebKit 按键限制)
+        if (watchFlexy) {
+            watchFlexy.dispatchEvent(new CustomEvent('yt-set-theater-mode-enabled', {
+                detail: { enabled: true },
+                bubbles: true,
+                composed: true
+            }));
         }
 
-        // 桌面端或无按钮时: 优先模拟键盘快捷键 'T'
-        if (player) {
+        // 策略2: 点击尺寸切换按钮 (若当前未开启剧场模式)
+        if (sizeButton && !isInTheaterMode()) {
+            sizeButton.click();
+        }
+
+        // 策略3: 桌面端键盘快捷键 T
+        if (player && !isTouchDevice && !isInTheaterMode()) {
             try { player.focus(); } catch (e) {}
-            const event = new KeyboardEvent('keydown', {
+            player.dispatchEvent(new KeyboardEvent('keydown', {
                 key: 't',
                 code: 'KeyT',
                 keyCode: 84,
                 which: 84,
                 bubbles: true,
                 cancelable: true
-            });
-            player.dispatchEvent(event);
-            console.log('[YouTube 增强] 尝试开启剧场模式 (键盘快捷键)');
-
-            // 针对部分触控设备可能需要双重触发保障
-            if (sizeButton && isTouchDevice) {
-                sizeButton.click();
-            }
-            return true;
+            }));
         }
 
-        if (sizeButton) {
-            sizeButton.click();
-            console.log('[YouTube 增强] 尝试开启剧场模式 (DOM 点击回退)');
-            return true;
+        // 策略4: iPad Safari 终极兜底 —— 若第 2 次尝试仍未激活，直接挂载属性并通知播放器重算尺寸
+        if (watchFlexy && !isInTheaterMode() && theaterAttempts >= 1) {
+            watchFlexy.theater = true;
+            watchFlexy.setAttribute('theater', '');
+            watchFlexy.setAttribute('full-bleed-player', '');
+            window.dispatchEvent(new Event('resize'));
         }
 
-        return false;
+        return true;
     }
 
     function applyVideoSettings() {
@@ -219,26 +234,21 @@
 
         if (watchFlexy && player) {
             
-            // 1. 剧场模式 (多策略兼容：iPad Safari 触屏优先 DOM 点击，PC 优先快捷键，带确认重试机制)
+            // 1. 剧场模式 (四重策略兼容 iPad Safari 与桌面端，带确认重试机制)
             if (!appliedStates.theater) {
-                if (!shouldEnableTheater()) {
-                    // 视口宽度不足 992px（如 iPad 竖屏），原生已是单列通栏布局，无需且无法切换剧场模式
-                    appliedStates.theater = true;
-                } else if (isInTheaterMode()) {
-                    // 已经是剧场模式，标记完成
+                if (isInTheaterMode()) {
                     appliedStates.theater = true;
                 } else {
                     triggerTheaterMode();
                     theaterAttempts++;
-                    // 延迟 500ms 确认状态，成功才标记完成；若未成功且未超限则允许后续轮询重试（最多重试 6 次）
                     setTimeout(() => {
                         if (isInTheaterMode()) {
                             appliedStates.theater = true;
                             console.log('[YouTube 增强] 剧场模式已成功开启');
-                        } else if (theaterAttempts >= 6) {
-                            appliedStates.theater = true; // 超过重试上限，停止尝试以防死循环
+                        } else if (theaterAttempts >= 8) {
+                            appliedStates.theater = true;
                         }
-                    }, 500);
+                    }, 400);
                 }
             }
 
